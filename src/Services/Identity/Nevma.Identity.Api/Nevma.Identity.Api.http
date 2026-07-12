@@ -1,0 +1,16 @@
+@Nevma.Identity.Api_HostAddress = http://localhost:5016
+
+POST {{Nevma.Identity.Api_HostAddress}}/api/users
+Content-Type: application/json
+
+{
+  "displayName": "Rafael",
+  "avatarUrl": null
+}
+
+###
+
+GET {{Nevma.Identity.Api_HostAddress}}/health
+Accept: application/json
+
+###

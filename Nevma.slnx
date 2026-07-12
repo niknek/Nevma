@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/Nevma.Contracts/Nevma.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/src/Gateway/">
+    <Project Path="src/Gateway/Nevma.Gateway/Nevma.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Identity/">
+    <Project Path="src/Services/Identity/Nevma.Identity.Api/Nevma.Identity.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Messaging/">
+    <Project Path="src/Services/Messaging/Nevma.Messaging.Api/Nevma.Messaging.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Services/Planning/">
+    <Project Path="src/Services/Planning/Nevma.Planning.Api/Nevma.Planning.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Nevma.ArchitectureTests/Nevma.ArchitectureTests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.dotnet-home/
+.template-hive/
+TestResults/
+coverage/
+appsettings.Local.json
+.env
