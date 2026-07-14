@@ -2,9 +2,12 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nevma.Notifications.Api.Application;
 using Nevma.Notifications.Api.Application.Notifications;
+using Nevma.Notifications.Api.Application.Integration;
 using Nevma.Notifications.Api.Application.PushDevices;
 using Nevma.Notifications.Api.Infrastructure.Authentication;
 using Nevma.Notifications.Api.Infrastructure.Notifications;
+using Nevma.Notifications.Api.Infrastructure.Inbox;
+using Nevma.Notifications.Api.Infrastructure.Messaging;
 using Nevma.Notifications.Api.Infrastructure.Persistence;
 using Nevma.Notifications.Api.Infrastructure.PushDevices;
 
@@ -30,10 +33,20 @@ public static class DependencyInjection
         services.AddScoped<INotificationsUnitOfWork>(provider =>
             provider.GetRequiredService<NotificationsDbContext>());
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
+        services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
         services.AddScoped<IPushDeviceRepository, EfPushDeviceRepository>();
         services.AddSingleton<IPushTokenProtector, DataProtectionPushTokenProtector>();
         services.AddScoped<NotificationService>();
         services.AddScoped<PushDeviceService>();
+        services.AddScoped<PlanningEventHandler>();
+
+        var brokerOptions = configuration
+            .GetSection(MessageBrokerOptions.SectionName)
+            .Get<MessageBrokerOptions>() ?? new MessageBrokerOptions();
+        services.Configure<MessageBrokerOptions>(
+            configuration.GetSection(MessageBrokerOptions.SectionName));
+        if (brokerOptions.Enabled)
+            services.AddHostedService<PlanningEventsConsumer>();
         return services;
     }
 }
