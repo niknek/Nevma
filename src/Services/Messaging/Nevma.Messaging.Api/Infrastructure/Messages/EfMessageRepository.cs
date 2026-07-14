@@ -10,6 +10,9 @@ public sealed class EfMessageRepository(MessagingDbContext dbContext) : IMessage
     public async Task AddAsync(Message message, CancellationToken cancellationToken = default) =>
         await dbContext.Messages.AddAsync(message, cancellationToken);
 
+    public Task<Message?> GetAsync(Guid messageId, CancellationToken cancellationToken = default) =>
+        dbContext.Messages.SingleOrDefaultAsync(message => message.Id == messageId, cancellationToken);
+
     public async Task<IReadOnlyList<Message>> ListAsync(
         Guid conversationId,
         long? beforeSequence,
@@ -27,4 +30,32 @@ public sealed class EfMessageRepository(MessagingDbContext dbContext) : IMessage
             .Take(limit)
             .ToListAsync(cancellationToken);
     }
+
+    public Task<MessageReceipt?> GetReceiptAsync(
+        Guid messageId,
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.MessageReceipts.SingleOrDefaultAsync(
+            receipt => receipt.MessageId == messageId && receipt.UserId == userId,
+            cancellationToken);
+
+    public async Task AddReceiptAsync(
+        MessageReceipt receipt,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.MessageReceipts.AddAsync(receipt, cancellationToken);
+
+    public Task<MessageReaction?> GetReactionAsync(
+        Guid messageId,
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.MessageReactions.SingleOrDefaultAsync(
+            reaction => reaction.MessageId == messageId && reaction.UserId == userId,
+            cancellationToken);
+
+    public async Task AddReactionAsync(
+        MessageReaction reaction,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.MessageReactions.AddAsync(reaction, cancellationToken);
+
+    public void RemoveReaction(MessageReaction reaction) => dbContext.MessageReactions.Remove(reaction);
 }

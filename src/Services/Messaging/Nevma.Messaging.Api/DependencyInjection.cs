@@ -10,6 +10,7 @@ using Nevma.Messaging.Api.Infrastructure.Persistence;
 using Nevma.Messaging.Api.Infrastructure.Inbox;
 using Nevma.Messaging.Api.Infrastructure.Messaging;
 using Nevma.Messaging.Api.Infrastructure.Realtime;
+using Nevma.Messaging.Api.Application.Presence;
 
 namespace Nevma.Messaging.Api;
 
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageRepository, EfMessageRepository>();
         services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
         services.AddScoped<IUserRealtimePublisher, SignalRUserRealtimePublisher>();
+        services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
         services.AddScoped<PlanningEventHandler>();

@@ -19,6 +19,11 @@ public sealed class EfConversationRepository(MessagingDbContext dbContext) : ICo
         dbContext.Entry(conversation).State = EntityState.Detached;
     }
 
+    public Task<Conversation?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
+        dbContext.Conversations
+            .Include(conversation => conversation.Participants)
+            .SingleOrDefaultAsync(conversation => conversation.Id == id, cancellationToken);
+
     public Task<Conversation?> FindPersonalAsync(
         string personalKey,
         CancellationToken cancellationToken = default) =>
@@ -45,5 +50,15 @@ public sealed class EfConversationRepository(MessagingDbContext dbContext) : ICo
         CancellationToken cancellationToken = default) =>
         dbContext.ConversationParticipants.AnyAsync(
             participant => participant.ConversationId == conversationId && participant.UserId == userId,
+            cancellationToken);
+
+    public Task<bool> ShareConversationAsync(
+        Guid firstUserId,
+        Guid secondUserId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Conversations.AnyAsync(
+            conversation =>
+                conversation.Participants.Any(participant => participant.UserId == firstUserId) &&
+                conversation.Participants.Any(participant => participant.UserId == secondUserId),
             cancellationToken);
 }

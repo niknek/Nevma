@@ -15,12 +15,20 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(message => message.Sequence).UseIdentityAlwaysColumn();
         builder.Property(message => message.SenderId).IsRequired();
         builder.Property(message => message.Text).HasMaxLength(4_000).IsRequired();
+        builder.Property(message => message.ReplyToMessageId);
         builder.Property(message => message.SentAt).IsRequired();
+        builder.Property(message => message.EditedAt);
+        builder.Property(message => message.DeletedAt);
+        builder.Property<uint>("xmin").IsRowVersion();
         builder.HasIndex(message => message.Sequence).IsUnique();
         builder.HasIndex(message => new { message.ConversationId, message.Sequence });
         builder.HasOne<Conversation>()
             .WithMany()
             .HasForeignKey(message => message.ConversationId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Message>()
+            .WithMany()
+            .HasForeignKey(message => message.ReplyToMessageId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

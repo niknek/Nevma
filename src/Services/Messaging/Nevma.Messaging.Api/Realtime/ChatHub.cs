@@ -2,11 +2,14 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Nevma.Messaging.Api.Application.Conversations;
+using Nevma.Messaging.Api.Application.Presence;
 
 namespace Nevma.Messaging.Api.Realtime;
 
 [Authorize]
-public sealed class ChatHub(ConversationService conversationService) : Hub
+public sealed class ChatHub(
+    ConversationService conversationService,
+    IUserPresenceTracker presenceTracker) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -17,7 +20,15 @@ public sealed class ChatHub(ConversationService conversationService) : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(userId));
+        presenceTracker.Connected(userId);
         await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        if (TryGetUserId(out var userId))
+            presenceTracker.Disconnected(userId);
+        await base.OnDisconnectedAsync(exception);
     }
 
     public async Task JoinConversation(Guid conversationId)

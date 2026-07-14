@@ -46,10 +46,150 @@ public sealed class MessageService(
         if (!await conversationRepository.IsParticipantAsync(conversationId, senderId, cancellationToken))
             return new SendMessageResult.NotFound();
 
-        var message = Message.Create(conversationId, senderId, request.Text, timeProvider.GetUtcNow());
+        if (request.ReplyToMessageId is not null)
+        {
+            var repliedTo = await messageRepository.GetAsync(request.ReplyToMessageId.Value, cancellationToken);
+            if (repliedTo is null || repliedTo.ConversationId != conversationId || repliedTo.DeletedAt is not null)
+                return new SendMessageResult.Invalid("replyToMessageId", "Reply target is unavailable.");
+        }
+
+        var message = Message.Create(
+            conversationId,
+            senderId,
+            request.Text,
+            request.ReplyToMessageId,
+            timeProvider.GetUtcNow());
         await messageRepository.AddAsync(message, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return new SendMessageResult.Sent(ToResponse(message));
+    }
+
+    public async Task<MessageChangeResult> EditAsync(
+        Guid conversationId,
+        Guid messageId,
+        Guid actorId,
+        EditMessageRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 4_000)
+            return new MessageChangeResult.Invalid("Message text must contain 1 to 4000 characters.");
+        if (!await conversationRepository.IsParticipantAsync(conversationId, actorId, cancellationToken))
+            return new MessageChangeResult.NotFound();
+
+        var message = await messageRepository.GetAsync(messageId, cancellationToken);
+        if (message is null || message.ConversationId != conversationId)
+            return new MessageChangeResult.NotFound();
+        if (message.SenderId != actorId)
+            return new MessageChangeResult.Forbidden();
+        if (!message.Edit(actorId, request.Text, timeProvider.GetUtcNow(), TimeSpan.FromMinutes(15)))
+            return new MessageChangeResult.Conflict("The edit window has expired or the message was deleted.");
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new MessageChangeResult.Changed(ToResponse(message));
+    }
+
+    public async Task<MessageChangeResult> DeleteAsync(
+        Guid conversationId,
+        Guid messageId,
+        Guid actorId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await conversationRepository.IsParticipantAsync(conversationId, actorId, cancellationToken))
+            return new MessageChangeResult.NotFound();
+        var message = await messageRepository.GetAsync(messageId, cancellationToken);
+        if (message is null || message.ConversationId != conversationId)
+            return new MessageChangeResult.NotFound();
+        if (message.SenderId != actorId)
+            return new MessageChangeResult.Forbidden();
+        if (!message.Delete(actorId, timeProvider.GetUtcNow(), TimeSpan.FromHours(24)))
+            return new MessageChangeResult.Conflict("The delete window has expired or the message was deleted.");
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new MessageChangeResult.Changed(ToResponse(message));
+    }
+
+    public async Task<MessageReceiptResult> MarkReceiptAsync(
+        Guid conversationId,
+        Guid messageId,
+        Guid actorId,
+        MessageReceiptKind kind,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await conversationRepository.IsParticipantAsync(conversationId, actorId, cancellationToken))
+            return new MessageReceiptResult.NotFound();
+        var message = await messageRepository.GetAsync(messageId, cancellationToken);
+        if (message is null || message.ConversationId != conversationId)
+            return new MessageReceiptResult.NotFound();
+        if (message.SenderId == actorId)
+            return new MessageReceiptResult.Invalid("A sender cannot acknowledge their own message.");
+
+        var receipt = await messageRepository.GetReceiptAsync(messageId, actorId, cancellationToken);
+        if (receipt is null)
+        {
+            receipt = MessageReceipt.Create(messageId, actorId);
+            await messageRepository.AddReceiptAsync(receipt, cancellationToken);
+        }
+        var now = timeProvider.GetUtcNow();
+        if (kind == MessageReceiptKind.Read)
+            receipt.MarkRead(now);
+        else
+            receipt.MarkDelivered(now);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new MessageReceiptResult.Marked(new MessageReceiptResponse(
+            receipt.MessageId,
+            receipt.UserId,
+            receipt.DeliveredAt,
+            receipt.ReadAt));
+    }
+
+    public async Task<MessageReactionResult> SetReactionAsync(
+        Guid conversationId,
+        Guid messageId,
+        Guid actorId,
+        string emoji,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(emoji) || emoji.EnumerateRunes().Count() > 8 || emoji.Length > 32)
+            return new MessageReactionResult.Invalid("Reaction must contain a short emoji value.");
+        if (!await conversationRepository.IsParticipantAsync(conversationId, actorId, cancellationToken))
+            return new MessageReactionResult.NotFound();
+        var message = await messageRepository.GetAsync(messageId, cancellationToken);
+        if (message is null || message.ConversationId != conversationId || message.DeletedAt is not null)
+            return new MessageReactionResult.NotFound();
+
+        var now = timeProvider.GetUtcNow();
+        var reaction = await messageRepository.GetReactionAsync(messageId, actorId, cancellationToken);
+        if (reaction is null)
+        {
+            reaction = MessageReaction.Create(messageId, actorId, emoji.Trim(), now);
+            await messageRepository.AddReactionAsync(reaction, cancellationToken);
+        }
+        else
+        {
+            reaction.Change(emoji.Trim(), now);
+        }
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new MessageReactionResult.Changed(new MessageReactionResponse(
+            reaction.MessageId,
+            reaction.UserId,
+            reaction.Emoji,
+            reaction.CreatedAt));
+    }
+
+    public async Task<bool> RemoveReactionAsync(
+        Guid conversationId,
+        Guid messageId,
+        Guid actorId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await conversationRepository.IsParticipantAsync(conversationId, actorId, cancellationToken))
+            return false;
+        var reaction = await messageRepository.GetReactionAsync(messageId, actorId, cancellationToken);
+        if (reaction is null)
+            return false;
+        messageRepository.RemoveReaction(reaction);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     private static MessageResponse ToResponse(Message message) =>
@@ -59,7 +199,33 @@ public sealed class MessageService(
             message.ConversationId,
             message.SenderId,
             message.Text,
-            message.SentAt);
+            message.SentAt,
+            message.ReplyToMessageId,
+            message.EditedAt,
+            message.DeletedAt);
+}
+
+public abstract record MessageChangeResult
+{
+    public sealed record Changed(MessageResponse Message) : MessageChangeResult;
+    public sealed record NotFound : MessageChangeResult;
+    public sealed record Forbidden : MessageChangeResult;
+    public sealed record Invalid(string Message) : MessageChangeResult;
+    public sealed record Conflict(string Message) : MessageChangeResult;
+}
+
+public abstract record MessageReceiptResult
+{
+    public sealed record Marked(MessageReceiptResponse Receipt) : MessageReceiptResult;
+    public sealed record NotFound : MessageReceiptResult;
+    public sealed record Invalid(string Message) : MessageReceiptResult;
+}
+
+public abstract record MessageReactionResult
+{
+    public sealed record Changed(MessageReactionResponse Reaction) : MessageReactionResult;
+    public sealed record NotFound : MessageReactionResult;
+    public sealed record Invalid(string Message) : MessageReactionResult;
 }
 
 public abstract record SendMessageResult

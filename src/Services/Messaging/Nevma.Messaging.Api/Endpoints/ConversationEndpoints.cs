@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.SignalR;
 using Nevma.Contracts.Messaging;
 using Nevma.Messaging.Api.Application.Conversations;
 using Nevma.Messaging.Api.Application.Messages;
+using Nevma.Messaging.Api.Application.Presence;
 using Nevma.Messaging.Api.Realtime;
 
 namespace Nevma.Messaging.Api.Endpoints;
@@ -40,6 +41,71 @@ public static class ConversationEndpoints
             if (!TryGetUserId(principal, out var userId))
                 return Results.Unauthorized();
             return Results.Ok(await service.ListAsync(userId, cancellationToken));
+        });
+
+        conversations.MapPut("/{conversationId:guid}", async (
+            Guid conversationId,
+            UpdateConversationRequest request,
+            ClaimsPrincipal principal,
+            ConversationService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            return MapConversationChange(await service.RenameAsync(
+                conversationId,
+                actorId,
+                request.Title,
+                cancellationToken));
+        });
+
+        conversations.MapPost("/{conversationId:guid}/participants", async (
+            Guid conversationId,
+            AddConversationParticipantRequest request,
+            ClaimsPrincipal principal,
+            ConversationService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            return MapConversationChange(await service.AddParticipantAsync(
+                conversationId,
+                actorId,
+                request.UserId,
+                cancellationToken));
+        });
+
+        conversations.MapDelete("/{conversationId:guid}/participants/{userId:guid}", async (
+            Guid conversationId,
+            Guid userId,
+            ClaimsPrincipal principal,
+            ConversationService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            return MapConversationChange(await service.RemoveParticipantAsync(
+                conversationId,
+                actorId,
+                userId,
+                cancellationToken));
+        });
+
+        conversations.MapGet("/presence/{userId:guid}", async (
+            Guid userId,
+            ClaimsPrincipal principal,
+            IConversationRepository repository,
+            IUserPresenceTracker presenceTracker,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            if (actorId != userId && !await repository.ShareConversationAsync(
+                actorId,
+                userId,
+                cancellationToken))
+                return Results.NotFound();
+            return Results.Ok(presenceTracker.Get(userId));
         });
 
         conversations.MapGet("/{conversationId:guid}/messages", async (
@@ -92,9 +158,150 @@ public static class ConversationEndpoints
                 message);
         });
 
+        conversations.MapPut("/{conversationId:guid}/messages/{messageId:guid}", async (
+            Guid conversationId,
+            Guid messageId,
+            EditMessageRequest request,
+            ClaimsPrincipal principal,
+            MessageService service,
+            IHubContext<ChatHub> hub,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            var result = await service.EditAsync(
+                conversationId,
+                messageId,
+                actorId,
+                request,
+                cancellationToken);
+            if (result is not MessageChangeResult.Changed changed)
+                return MapMessageChangeFailure(result);
+            await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
+                .SendAsync("message.updated", changed.Message, cancellationToken);
+            return Results.Ok(changed.Message);
+        });
+
+        conversations.MapDelete("/{conversationId:guid}/messages/{messageId:guid}", async (
+            Guid conversationId,
+            Guid messageId,
+            ClaimsPrincipal principal,
+            MessageService service,
+            IHubContext<ChatHub> hub,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            var result = await service.DeleteAsync(
+                conversationId,
+                messageId,
+                actorId,
+                cancellationToken);
+            if (result is not MessageChangeResult.Changed changed)
+                return MapMessageChangeFailure(result);
+            await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
+                .SendAsync("message.deleted", changed.Message, cancellationToken);
+            return Results.Ok(changed.Message);
+        });
+
+        conversations.MapPost("/{conversationId:guid}/messages/{messageId:guid}/receipts", async (
+            Guid conversationId,
+            Guid messageId,
+            MessageReceiptRequest request,
+            ClaimsPrincipal principal,
+            MessageService service,
+            IHubContext<ChatHub> hub,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            var result = await service.MarkReceiptAsync(
+                conversationId,
+                messageId,
+                actorId,
+                request.Kind,
+                cancellationToken);
+            if (result is MessageReceiptResult.NotFound)
+                return Results.NotFound();
+            if (result is MessageReceiptResult.Invalid invalid)
+                return Results.BadRequest(new { message = invalid.Message });
+            var receipt = ((MessageReceiptResult.Marked)result).Receipt;
+            await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
+                .SendAsync("message.receipt", receipt, cancellationToken);
+            return Results.Ok(receipt);
+        });
+
+        conversations.MapPut("/{conversationId:guid}/messages/{messageId:guid}/reaction", async (
+            Guid conversationId,
+            Guid messageId,
+            MessageReactionRequest request,
+            ClaimsPrincipal principal,
+            MessageService service,
+            IHubContext<ChatHub> hub,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            var result = await service.SetReactionAsync(
+                conversationId,
+                messageId,
+                actorId,
+                request.Emoji,
+                cancellationToken);
+            if (result is MessageReactionResult.NotFound)
+                return Results.NotFound();
+            if (result is MessageReactionResult.Invalid invalid)
+                return Results.BadRequest(new { message = invalid.Message });
+            var reaction = ((MessageReactionResult.Changed)result).Reaction;
+            await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
+                .SendAsync("message.reaction", reaction, cancellationToken);
+            return Results.Ok(reaction);
+        });
+
+        conversations.MapDelete("/{conversationId:guid}/messages/{messageId:guid}/reaction", async (
+            Guid conversationId,
+            Guid messageId,
+            ClaimsPrincipal principal,
+            MessageService service,
+            IHubContext<ChatHub> hub,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+            if (!await service.RemoveReactionAsync(
+                conversationId,
+                messageId,
+                actorId,
+                cancellationToken))
+                return Results.NotFound();
+            await hub.Clients.Group(ChatHub.ConversationGroupName(conversationId))
+                .SendAsync("message.reaction.removed", new { messageId, userId = actorId }, cancellationToken);
+            return Results.NoContent();
+        });
+
         return endpoints;
     }
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId) =>
         Guid.TryParse(principal.FindFirstValue("sub"), out userId);
+
+    private static IResult MapMessageChangeFailure(MessageChangeResult result) =>
+        result switch
+        {
+            MessageChangeResult.NotFound => Results.NotFound(),
+            MessageChangeResult.Forbidden => Results.Forbid(),
+            MessageChangeResult.Invalid invalid => Results.BadRequest(new { message = invalid.Message }),
+            MessageChangeResult.Conflict conflict => Results.Conflict(new { message = conflict.Message }),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+        };
+
+    private static IResult MapConversationChange(ConversationChangeResult result) =>
+        result switch
+        {
+            ConversationChangeResult.Changed changed => Results.Ok(changed.Conversation),
+            ConversationChangeResult.NotFound => Results.NotFound(),
+            ConversationChangeResult.Forbidden => Results.Forbid(),
+            ConversationChangeResult.Invalid invalid => Results.BadRequest(new { message = invalid.Message }),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+        };
 }

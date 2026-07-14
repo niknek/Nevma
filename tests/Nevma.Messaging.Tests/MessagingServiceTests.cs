@@ -145,6 +145,98 @@ public sealed class MessagingServiceTests
         Assert.Contains(nameof(CreateConversationRequest.ParticipantIds), result.Errors.Keys);
     }
 
+    [Fact]
+    public async Task Member_can_reply_edit_and_delete_their_message()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var messageService = CreateMessageService(context);
+        var senderId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(
+            senderId,
+            PersonalConversation(Guid.NewGuid()));
+        var original = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest("Original")));
+        var reply = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation.Id,
+            senderId,
+            new SendMessageRequest("Reply", original.Message.Id)));
+
+        var edited = await messageService.EditAsync(
+            conversation.Conversation.Id,
+            reply.Message.Id,
+            senderId,
+            new EditMessageRequest("Edited reply"));
+        var deleted = await messageService.DeleteAsync(
+            conversation.Conversation.Id,
+            reply.Message.Id,
+            senderId);
+
+        Assert.Equal(original.Message.Id, reply.Message.ReplyToMessageId);
+        Assert.Equal("Edited reply", Assert.IsType<MessageChangeResult.Changed>(edited).Message.Text);
+        Assert.NotNull(Assert.IsType<MessageChangeResult.Changed>(deleted).Message.DeletedAt);
+    }
+
+    [Fact]
+    public async Task Recipient_can_mark_read_and_react()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var messageService = CreateMessageService(context);
+        var senderId = Guid.NewGuid();
+        var recipientId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(
+            senderId,
+            PersonalConversation(recipientId));
+        var sent = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest("Hello")));
+
+        var receipt = await messageService.MarkReceiptAsync(
+            conversation.Conversation.Id,
+            sent.Message.Id,
+            recipientId,
+            MessageReceiptKind.Read);
+        var reaction = await messageService.SetReactionAsync(
+            conversation.Conversation.Id,
+            sent.Message.Id,
+            recipientId,
+            "👍");
+
+        var marked = Assert.IsType<MessageReceiptResult.Marked>(receipt);
+        Assert.NotNull(marked.Receipt.DeliveredAt);
+        Assert.NotNull(marked.Receipt.ReadAt);
+        Assert.Equal("👍", Assert.IsType<MessageReactionResult.Changed>(reaction).Reaction.Emoji);
+    }
+
+    [Fact]
+    public async Task Non_sender_cannot_edit_a_message()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var messageService = CreateMessageService(context);
+        var senderId = Guid.NewGuid();
+        var recipientId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(
+            senderId,
+            PersonalConversation(recipientId));
+        var sent = Assert.IsType<SendMessageResult.Sent>(await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest("Private")));
+
+        var result = await messageService.EditAsync(
+            conversation.Conversation.Id,
+            sent.Message.Id,
+            recipientId,
+            new EditMessageRequest("Tampered"));
+
+        Assert.IsType<MessageChangeResult.Forbidden>(result);
+    }
+
     private static ConversationService CreateConversationService(MessagingDbContext context) =>
         new(new EfConversationRepository(context), context, new FixedTimeProvider(Now));
 

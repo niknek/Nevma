@@ -64,6 +64,59 @@ public sealed class ConversationService(
         CancellationToken cancellationToken = default) =>
         repository.IsParticipantAsync(conversationId, userId, cancellationToken);
 
+    public async Task<ConversationChangeResult> RenameAsync(
+        Guid conversationId,
+        Guid actorId,
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 120)
+            return new ConversationChangeResult.Invalid("Title must contain 1 to 120 characters.");
+        var conversation = await repository.GetAsync(conversationId, cancellationToken);
+        if (conversation is null)
+            return new ConversationChangeResult.NotFound();
+        if (conversation.CreatedBy != actorId)
+            return new ConversationChangeResult.Forbidden();
+        if (!conversation.Rename(title))
+            return new ConversationChangeResult.Invalid("Only group conversations can be renamed.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new ConversationChangeResult.Changed(ToResponse(conversation));
+    }
+
+    public async Task<ConversationChangeResult> AddParticipantAsync(
+        Guid conversationId,
+        Guid actorId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var conversation = await repository.GetAsync(conversationId, cancellationToken);
+        if (conversation is null)
+            return new ConversationChangeResult.NotFound();
+        if (conversation.CreatedBy != actorId)
+            return new ConversationChangeResult.Forbidden();
+        if (!conversation.AddParticipant(userId, timeProvider.GetUtcNow()))
+            return new ConversationChangeResult.Invalid("Participant cannot be added to this conversation.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new ConversationChangeResult.Changed(ToResponse(conversation));
+    }
+
+    public async Task<ConversationChangeResult> RemoveParticipantAsync(
+        Guid conversationId,
+        Guid actorId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var conversation = await repository.GetAsync(conversationId, cancellationToken);
+        if (conversation is null)
+            return new ConversationChangeResult.NotFound();
+        if (conversation.CreatedBy != actorId && actorId != userId)
+            return new ConversationChangeResult.Forbidden();
+        if (!conversation.RemoveParticipant(userId))
+            return new ConversationChangeResult.Invalid("Participant cannot be removed from this conversation.");
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new ConversationChangeResult.Changed(ToResponse(conversation));
+    }
+
     private static Dictionary<string, string[]> Validate(
         CreateConversationRequest request,
         Guid creatorId,
@@ -96,7 +149,16 @@ public sealed class ConversationService(
             (ContractKind)(int)conversation.Kind,
             conversation.Title,
             conversation.Participants.Select(participant => participant.UserId).ToArray(),
-            conversation.CreatedAt);
+            conversation.CreatedAt,
+            conversation.CreatedBy);
+}
+
+public abstract record ConversationChangeResult
+{
+    public sealed record Changed(ConversationResponse Conversation) : ConversationChangeResult;
+    public sealed record NotFound : ConversationChangeResult;
+    public sealed record Forbidden : ConversationChangeResult;
+    public sealed record Invalid(string Message) : ConversationChangeResult;
 }
 
 public sealed record CreateConversationResult(
