@@ -77,4 +77,5 @@ $env:MessageBroker__Uri="amqps://<user>:<password>@<host>/<vhost>"
 ```
 
 Publisher confirms are enabled, and failed deliveries remain in the outbox for retry. No broker
-credentials are stored in source control.
+credentials are stored in source control. Messaging consumes these events through a durable
+quorum queue, records processed event IDs in its inbox, and dead-letters malformed payloads.

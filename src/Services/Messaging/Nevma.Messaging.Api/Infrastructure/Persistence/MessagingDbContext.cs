@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Nevma.Messaging.Api.Application;
 using Nevma.Messaging.Api.Application.Conversations;
+using Nevma.Messaging.Api.Application.Integration;
 using Nevma.Messaging.Api.Domain.Conversations;
 using Nevma.Messaging.Api.Domain.Messages;
+using Nevma.Messaging.Api.Infrastructure.Inbox;
 using Npgsql;
 
 namespace Nevma.Messaging.Api.Infrastructure.Persistence;
@@ -13,6 +15,7 @@ public sealed class MessagingDbContext(DbContextOptions<MessagingDbContext> opti
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationParticipant> ConversationParticipants => Set<ConversationParticipant>();
     public DbSet<Message> Messages => Set<Message>();
+    public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -34,6 +37,15 @@ public sealed class MessagingDbContext(DbContextOptions<MessagingDbContext> opti
             })
         {
             throw new DuplicatePersonalConversationException(exception);
+        }
+        catch (DbUpdateException exception) when (
+            exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: "PK_inbox_messages"
+            })
+        {
+            throw new DuplicateInboxEventException(exception);
         }
     }
 }

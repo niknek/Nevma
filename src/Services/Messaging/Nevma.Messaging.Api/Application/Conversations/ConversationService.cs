@@ -42,6 +42,7 @@ public sealed class ConversationService(
         }
         catch (DuplicatePersonalConversationException) when (conversation.PersonalKey is not null)
         {
+            repository.Discard(conversation);
             var existing = await repository.FindPersonalAsync(conversation.PersonalKey, cancellationToken);
             if (existing is not null)
                 return CreateConversationResult.Success(ToResponse(existing), false);

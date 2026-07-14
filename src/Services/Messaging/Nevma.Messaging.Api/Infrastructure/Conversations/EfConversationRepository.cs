@@ -12,6 +12,13 @@ public sealed class EfConversationRepository(MessagingDbContext dbContext) : ICo
         CancellationToken cancellationToken = default) =>
         await dbContext.Conversations.AddAsync(conversation, cancellationToken);
 
+    public void Discard(Conversation conversation)
+    {
+        foreach (var participant in conversation.Participants)
+            dbContext.Entry(participant).State = EntityState.Detached;
+        dbContext.Entry(conversation).State = EntityState.Detached;
+    }
+
     public Task<Conversation?> FindPersonalAsync(
         string personalKey,
         CancellationToken cancellationToken = default) =>

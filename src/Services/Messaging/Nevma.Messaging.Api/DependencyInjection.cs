@@ -2,10 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using Nevma.Messaging.Api.Application;
 using Nevma.Messaging.Api.Application.Conversations;
 using Nevma.Messaging.Api.Application.Messages;
+using Nevma.Messaging.Api.Application.Integration;
 using Nevma.Messaging.Api.Infrastructure.Authentication;
 using Nevma.Messaging.Api.Infrastructure.Conversations;
 using Nevma.Messaging.Api.Infrastructure.Messages;
 using Nevma.Messaging.Api.Infrastructure.Persistence;
+using Nevma.Messaging.Api.Infrastructure.Inbox;
+using Nevma.Messaging.Api.Infrastructure.Messaging;
+using Nevma.Messaging.Api.Infrastructure.Realtime;
 
 namespace Nevma.Messaging.Api;
 
@@ -29,8 +33,19 @@ public static class DependencyInjection
             provider.GetRequiredService<MessagingDbContext>());
         services.AddScoped<IConversationRepository, EfConversationRepository>();
         services.AddScoped<IMessageRepository, EfMessageRepository>();
+        services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
+        services.AddScoped<IUserRealtimePublisher, SignalRUserRealtimePublisher>();
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
+        services.AddScoped<PlanningEventHandler>();
+
+        var brokerOptions = configuration
+            .GetSection(MessageBrokerOptions.SectionName)
+            .Get<MessageBrokerOptions>() ?? new MessageBrokerOptions();
+        services.Configure<MessageBrokerOptions>(
+            configuration.GetSection(MessageBrokerOptions.SectionName));
+        if (brokerOptions.Enabled)
+            services.AddHostedService<PlanningEventsConsumer>();
         return services;
     }
 }
