@@ -4,6 +4,6 @@ namespace Nevma.Identity.Api.Application.Users;
 
 public interface IUserRepository
 {
-    User? GetById(Guid id);
-    void Add(User user);
+    Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task AddAsync(User user, CancellationToken cancellationToken = default);
 }

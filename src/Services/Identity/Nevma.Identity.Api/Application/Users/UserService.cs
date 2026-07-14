@@ -1,17 +1,23 @@
 using Nevma.Contracts.Identity;
+using Nevma.Identity.Api.Application;
 using Nevma.Identity.Api.Domain.Users;
 
 namespace Nevma.Identity.Api.Application.Users;
 
-public sealed class UserService(IUserRepository repository, TimeProvider timeProvider)
+public sealed class UserService(
+    IUserRepository repository,
+    IIdentityUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
 {
-    public UserSummary? GetById(Guid id)
+    public async Task<UserSummary?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var user = repository.GetById(id);
+        var user = await repository.GetByIdAsync(id, cancellationToken);
         return user is null ? null : ToSummary(user);
     }
 
-    public CreateUserResult Create(CreateUserRequest request)
+    public async Task<CreateUserResult> CreateAsync(
+        CreateUserRequest request,
+        CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.DisplayName))
         {
@@ -19,7 +25,8 @@ public sealed class UserService(IUserRepository repository, TimeProvider timePro
         }
 
         var user = User.Create(request.DisplayName, request.AvatarUrl, timeProvider.GetUtcNow());
-        repository.Add(user);
+        await repository.AddAsync(user, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return CreateUserResult.Success(ToSummary(user));
     }
 

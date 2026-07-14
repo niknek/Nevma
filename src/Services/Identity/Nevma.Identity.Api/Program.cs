@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddNevmaServiceDefaults();
-builder.Services.AddIdentityService();
+builder.Services.AddIdentityService(builder.Configuration);
 
 var app = builder.Build();
 

@@ -31,5 +31,13 @@ dotnet run --project src/Services/Messaging/Nevma.Messaging.Api
 dotnet run --project src/Gateway/Nevma.Gateway
 ```
 
-The current stores are intentionally in memory. PostgreSQL, Redis, durable messaging,
-authentication, and the transactional outbox will be introduced in the next backend slice.
+Planning and Messaging stores are still intentionally in memory. Redis, durable messaging,
+authentication, and the transactional outbox will be introduced in later backend slices.
+
+The Identity service now owns a PostgreSQL schema named `identity`. Supply its password and
+other environment-specific values outside source control, for example:
+
+```powershell
+$env:ConnectionStrings__IdentityDatabase="Host=localhost;Port=5432;Database=nevma_identity;Username=nevma_identity;Password=<secret>"
+dotnet ef database update --project src/Services/Identity/Nevma.Identity.Api
+```

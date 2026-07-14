@@ -9,15 +9,21 @@ public static class UserEndpoints
     {
         var users = endpoints.MapGroup("/api/users").WithTags("Users");
 
-        users.MapGet("/{id:guid}", (Guid id, UserService service) =>
+        users.MapGet("/{id:guid}", async (
+            Guid id,
+            UserService service,
+            CancellationToken cancellationToken) =>
         {
-            var user = service.GetById(id);
+            var user = await service.GetByIdAsync(id, cancellationToken);
             return user is null ? Results.NotFound() : Results.Ok(user);
         });
 
-        users.MapPost("/", (CreateUserRequest request, UserService service) =>
+        users.MapPost("/", async (
+            CreateUserRequest request,
+            UserService service,
+            CancellationToken cancellationToken) =>
         {
-            var result = service.Create(request);
+            var result = await service.CreateAsync(request, cancellationToken);
             return result.IsSuccess
                 ? Results.Created($"/api/users/{result.User!.Id}", result.User)
                 : Results.ValidationProblem(result.Errors);
