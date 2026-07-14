@@ -17,6 +17,11 @@ public sealed record CreateMeetingInvitationRequest(
     string? Location,
     string? Message);
 
+public sealed record CounterProposeMeetingInvitationRequest(
+    DateTimeOffset StartsAt,
+    TimeSpan Duration,
+    string? Location);
+
 public sealed record MeetingInvitationResponse(
     Guid Id,
     Guid OrganizerId,
@@ -28,7 +33,10 @@ public sealed record MeetingInvitationResponse(
     string? Message,
     MeetingInvitationStatus Status,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? RespondedAt);
+    DateTimeOffset? RespondedAt,
+    DateTimeOffset? ProposedStartsAt,
+    TimeSpan? ProposedDuration,
+    string? ProposedLocation);
 
 public sealed record CalendarEventResponse(
     Guid Id,

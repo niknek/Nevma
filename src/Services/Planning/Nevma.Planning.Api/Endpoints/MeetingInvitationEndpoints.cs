@@ -65,9 +65,50 @@ public static class MeetingInvitationEndpoints
             };
         });
 
+        invitations.MapPost("/{id:guid}/decline", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            PlanningService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+
+            return ToResult(await service.DeclineInvitationAsync(id, actorId, cancellationToken));
+        });
+
+        invitations.MapPost("/{id:guid}/counter-propose", async (
+            Guid id,
+            CounterProposeMeetingInvitationRequest request,
+            ClaimsPrincipal principal,
+            PlanningService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+
+            return ToResult(await service.CounterProposeInvitationAsync(
+                id,
+                actorId,
+                request,
+                cancellationToken));
+        });
+
         return endpoints;
     }
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId) =>
         Guid.TryParse(principal.FindFirstValue("sub"), out userId);
+
+    private static IResult ToResult(InvitationActionResult result) =>
+        result switch
+        {
+            InvitationActionResult.Updated updated => Results.Ok(updated.Invitation),
+            InvitationActionResult.NotFound => Results.NotFound(),
+            InvitationActionResult.Forbidden => Results.Forbid(),
+            InvitationActionResult.AlreadyHandled => Results.Conflict(
+                new { message = "Invitation has already been handled." }),
+            InvitationActionResult.ValidationFailed validation => Results.ValidationProblem(validation.Errors),
+            _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+        };
 }

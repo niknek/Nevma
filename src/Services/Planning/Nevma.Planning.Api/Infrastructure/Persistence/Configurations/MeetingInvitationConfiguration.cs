@@ -21,6 +21,9 @@ public sealed class MeetingInvitationConfiguration : IEntityTypeConfiguration<Me
         builder.Property(invitation => invitation.Status).HasConversion<string>().HasMaxLength(30);
         builder.Property(invitation => invitation.CreatedAt).IsRequired();
         builder.Property(invitation => invitation.RespondedAt);
+        builder.Property(invitation => invitation.ProposedStartsAt);
+        builder.Property(invitation => invitation.ProposedDuration);
+        builder.Property(invitation => invitation.ProposedLocation).HasMaxLength(500);
         builder.Property<uint>("xmin").IsRowVersion();
         builder.HasIndex(invitation => new { invitation.InviteeId, invitation.Status, invitation.StartsAt });
         builder.HasIndex(invitation => new { invitation.OrganizerId, invitation.Status, invitation.StartsAt });
