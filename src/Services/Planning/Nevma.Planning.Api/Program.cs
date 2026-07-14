@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddNevmaServiceDefaults();
-builder.Services.AddPlanningService();
+builder.Services.AddPlanningService(builder.Configuration);
 
 var app = builder.Build();
 
@@ -16,6 +16,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseNevmaServiceDefaults();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapMeetingInvitationEndpoints();
 app.MapCalendarEndpoints();

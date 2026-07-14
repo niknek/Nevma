@@ -10,7 +10,6 @@ public enum MeetingInvitationStatus
 }
 
 public sealed record CreateMeetingInvitationRequest(
-    Guid OrganizerId,
     Guid InviteeId,
     string Title,
     DateTimeOffset StartsAt,

@@ -4,18 +4,22 @@ using Nevma.Planning.Api.Domain.MeetingInvitations;
 
 namespace Nevma.Planning.Api.Application;
 
-public sealed class PlanningService(IPlanningRepository repository, TimeProvider timeProvider)
+public sealed class PlanningService(
+    IPlanningRepository repository,
+    IPlanningUnitOfWork unitOfWork,
+    TimeProvider timeProvider)
 {
-    private readonly Lock _sync = new();
-
-    public CreateInvitationResult CreateInvitation(CreateMeetingInvitationRequest request)
+    public async Task<CreateInvitationResult> CreateInvitationAsync(
+        Guid organizerId,
+        CreateMeetingInvitationRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var errors = Validate(request);
+        var errors = Validate(organizerId, request, timeProvider.GetUtcNow());
         if (errors.Count > 0)
             return CreateInvitationResult.Failure(errors);
 
         var invitation = MeetingInvitation.Create(
-            request.OrganizerId,
+            organizerId,
             request.InviteeId,
             request.Title,
             request.StartsAt,
@@ -24,53 +28,84 @@ public sealed class PlanningService(IPlanningRepository repository, TimeProvider
             request.Message,
             timeProvider.GetUtcNow());
 
-        repository.AddInvitation(invitation);
+        await repository.AddInvitationAsync(invitation, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return CreateInvitationResult.Success(ToResponse(invitation));
     }
 
-    public MeetingInvitationResponse? GetInvitation(Guid id)
+    public async Task<GetInvitationResult> GetInvitationAsync(
+        Guid id,
+        Guid actorId,
+        CancellationToken cancellationToken = default)
     {
-        var invitation = repository.GetInvitation(id);
-        return invitation is null ? null : ToResponse(invitation);
+        var invitation = await repository.GetInvitationAsync(id, cancellationToken);
+        if (invitation is null)
+            return new GetInvitationResult.NotFound();
+
+        if (invitation.OrganizerId != actorId && invitation.InviteeId != actorId)
+            return new GetInvitationResult.Forbidden();
+
+        return new GetInvitationResult.Found(ToResponse(invitation));
     }
 
-    public AcceptInvitationResult AcceptInvitation(Guid invitationId, Guid userId)
+    public async Task<AcceptInvitationResult> AcceptInvitationAsync(
+        Guid invitationId,
+        Guid actorId,
+        CancellationToken cancellationToken = default)
     {
-        lock (_sync)
+        var invitation = await repository.GetInvitationAsync(invitationId, cancellationToken);
+        if (invitation is null)
+            return new AcceptInvitationResult.NotFound();
+
+        var outcome = invitation.Accept(actorId, timeProvider.GetUtcNow());
+        if (outcome == AcceptOutcome.Forbidden)
+            return new AcceptInvitationResult.Forbidden();
+        if (outcome == AcceptOutcome.AlreadyHandled)
+            return new AcceptInvitationResult.AlreadyHandled();
+
+        var calendarEvent = CalendarEvent.FromAcceptedInvitation(invitation);
+        await repository.AddCalendarEventAsync(calendarEvent, cancellationToken);
+
+        try
         {
-            var invitation = repository.GetInvitation(invitationId);
-            if (invitation is null)
-                return new AcceptInvitationResult.NotFound();
-
-            var outcome = invitation.Accept(userId, timeProvider.GetUtcNow());
-            if (outcome == AcceptOutcome.Forbidden)
-                return new AcceptInvitationResult.Forbidden();
-            if (outcome == AcceptOutcome.AlreadyHandled)
-                return new AcceptInvitationResult.AlreadyHandled();
-
-            var calendarEvent = CalendarEvent.FromAcceptedInvitation(invitation);
-            repository.AddCalendarEvent(calendarEvent);
-            return new AcceptInvitationResult.Accepted(ToResponse(calendarEvent));
+            await unitOfWork.SaveChangesAsync(cancellationToken);
         }
+        catch (PlanningConcurrencyException)
+        {
+            return new AcceptInvitationResult.AlreadyHandled();
+        }
+
+        return new AcceptInvitationResult.Accepted(ToResponse(calendarEvent));
     }
 
-    public IReadOnlyCollection<CalendarEventResponse> GetCalendar(
+    public async Task<IReadOnlyCollection<CalendarEventResponse>> GetCalendarAsync(
         Guid userId,
         DateTimeOffset from,
-        DateTimeOffset to) =>
-        repository.GetCalendar(userId, from, to).Select(ToResponse).ToArray();
+        DateTimeOffset to,
+        CancellationToken cancellationToken = default)
+    {
+        var events = await repository.GetCalendarAsync(userId, from, to, cancellationToken);
+        return events.Select(ToResponse).ToArray();
+    }
 
-    private static Dictionary<string, string[]> Validate(CreateMeetingInvitationRequest request)
+    private static Dictionary<string, string[]> Validate(
+        Guid organizerId,
+        CreateMeetingInvitationRequest request,
+        DateTimeOffset now)
     {
         var errors = new Dictionary<string, string[]>();
-        if (request.OrganizerId == Guid.Empty || request.InviteeId == Guid.Empty)
+        if (organizerId == Guid.Empty || request.InviteeId == Guid.Empty)
             errors["participants"] = ["Organizer and invitee are required."];
-        if (request.OrganizerId == request.InviteeId)
+        if (organizerId == request.InviteeId)
             errors[nameof(request.InviteeId)] = ["Organizer and invitee must be different users."];
         if (string.IsNullOrWhiteSpace(request.Title))
             errors[nameof(request.Title)] = ["Title is required."];
+        if (request.Title?.Length > 200)
+            errors[nameof(request.Title)] = ["Title cannot exceed 200 characters."];
+        if (request.StartsAt <= now)
+            errors[nameof(request.StartsAt)] = ["Start time must be in the future."];
         if (request.Duration <= TimeSpan.Zero || request.Duration > TimeSpan.FromDays(1))
-            errors[nameof(request.Duration)] = ["Duration must be between zero and 24 hours."];
+            errors[nameof(request.Duration)] = ["Duration must be greater than zero and at most 24 hours."];
         return errors;
     }
 
@@ -110,6 +145,13 @@ public sealed record CreateInvitationResult(
 
     public static CreateInvitationResult Failure(IReadOnlyDictionary<string, string[]> errors) =>
         new(null, errors);
+}
+
+public abstract record GetInvitationResult
+{
+    public sealed record Found(MeetingInvitationResponse Invitation) : GetInvitationResult;
+    public sealed record NotFound : GetInvitationResult;
+    public sealed record Forbidden : GetInvitationResult;
 }
 
 public abstract record AcceptInvitationResult

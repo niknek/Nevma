@@ -11,7 +11,7 @@ public sealed class CalendarEvent
         DateTimeOffset startsAt,
         DateTimeOffset endsAt,
         string? location,
-        IReadOnlyCollection<Guid> participantIds)
+        Guid[] participantIds)
     {
         Id = id;
         InvitationId = invitationId;
@@ -28,7 +28,7 @@ public sealed class CalendarEvent
     public DateTimeOffset StartsAt { get; }
     public DateTimeOffset EndsAt { get; }
     public string? Location { get; }
-    public IReadOnlyCollection<Guid> ParticipantIds { get; }
+    public Guid[] ParticipantIds { get; }
 
     public static CalendarEvent FromAcceptedInvitation(MeetingInvitation invitation) =>
         new(

@@ -48,3 +48,12 @@ and `/connect/token`; there is no endpoint that directly turns a password into a
 Development seeds the public `nevma-mobile` client. Non-development environments must provide
 signing and encryption PFX certificates through the `Authentication__*CertificatePath` and
 `Authentication__*CertificatePassword` configuration keys.
+
+The Planning service owns a separate PostgreSQL database/schema and validates `nevma_api`
+access tokens issued by Identity. Configure and migrate it independently:
+
+```powershell
+$env:ConnectionStrings__PlanningDatabase="Host=localhost;Port=5432;Database=nevma_planning;Username=nevma_planning;Password=<secret>"
+$env:Authentication__Issuer="https://identity.example.com/"
+dotnet ef database update --project src/Services/Planning/Nevma.Planning.Api
+```
