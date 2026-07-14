@@ -12,6 +12,7 @@ public sealed class Message
     }
 
     public Guid Id { get; }
+    public long Sequence { get; private set; }
     public Guid ConversationId { get; }
     public Guid SenderId { get; }
     public string Text { get; }

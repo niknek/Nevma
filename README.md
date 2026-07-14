@@ -31,9 +31,6 @@ dotnet run --project src/Services/Messaging/Nevma.Messaging.Api
 dotnet run --project src/Gateway/Nevma.Gateway
 ```
 
-Planning and Messaging stores are still intentionally in memory. Redis, durable messaging,
-and the transactional outbox will be introduced in later backend slices.
-
 The Identity service now owns a PostgreSQL schema named `identity`. Supply its password and
 other environment-specific values outside source control, for example:
 
@@ -57,3 +54,16 @@ $env:ConnectionStrings__PlanningDatabase="Host=localhost;Port=5432;Database=nevm
 $env:Authentication__Issuer="https://identity.example.com/"
 dotnet ef database update --project src/Services/Planning/Nevma.Planning.Api
 ```
+
+The Messaging service owns the `messaging` schema and validates the same Identity access
+tokens. Messages are committed to PostgreSQL before SignalR publishes them. Configure and
+migrate this database independently as well:
+
+```powershell
+$env:ConnectionStrings__MessagingDatabase="Host=localhost;Port=5432;Database=nevma_messaging;Username=nevma_messaging;Password=<secret>"
+$env:Authentication__Issuer="https://identity.example.com/"
+dotnet ef database update --project src/Services/Messaging/Nevma.Messaging.Api
+```
+
+Redis scale-out and the transactional outbox are intentionally deferred to later backend
+slices; PostgreSQL remains the source of truth for conversations and messages.
