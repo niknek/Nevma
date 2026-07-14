@@ -18,6 +18,13 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
         builder.Property(message => message.NextAttemptAt).IsRequired();
         builder.Property(message => message.ProcessedAt);
         builder.Property(message => message.LastError).HasMaxLength(2_000);
-        builder.HasIndex(message => new { message.ProcessedAt, message.NextAttemptAt });
+        builder.Property(message => message.LockId);
+        builder.Property(message => message.LockedUntil);
+        builder.HasIndex(message => new
+        {
+            message.ProcessedAt,
+            message.NextAttemptAt,
+            message.LockedUntil
+        });
     }
 }

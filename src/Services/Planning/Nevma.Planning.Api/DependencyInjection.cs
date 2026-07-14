@@ -6,6 +6,7 @@ using Nevma.Planning.Api.Infrastructure.Persistence;
 using Nevma.Planning.Api.Application.Tasks;
 using Nevma.Planning.Api.Infrastructure.Tasks;
 using Nevma.Planning.Api.Infrastructure.Outbox;
+using Nevma.Planning.Api.Infrastructure.Messaging;
 
 namespace Nevma.Planning.Api;
 
@@ -28,9 +29,21 @@ public static class DependencyInjection
         services.AddScoped<IPlanningUnitOfWork>(provider => provider.GetRequiredService<PlanningDbContext>());
         services.AddScoped<IPlanningRepository, EfPlanningRepository>();
         services.AddScoped<IPlanningEventOutbox, EfPlanningEventOutbox>();
+        services.AddScoped<OutboxStore>();
         services.AddScoped<PlanningService>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
         services.AddScoped<TaskService>();
+
+        var brokerOptions = configuration
+            .GetSection(MessageBrokerOptions.SectionName)
+            .Get<MessageBrokerOptions>() ?? new MessageBrokerOptions();
+        services.Configure<MessageBrokerOptions>(
+            configuration.GetSection(MessageBrokerOptions.SectionName));
+        if (brokerOptions.Enabled)
+        {
+            services.AddSingleton<IIntegrationEventPublisher, RabbitMqIntegrationEventPublisher>();
+            services.AddHostedService<PlanningOutboxDispatcher>();
+        }
         return services;
     }
 }

@@ -65,5 +65,16 @@ $env:Authentication__Issuer="https://identity.example.com/"
 dotnet ef database update --project src/Services/Messaging/Nevma.Messaging.Api
 ```
 
-Redis scale-out and the transactional outbox are intentionally deferred to later backend
-slices; PostgreSQL remains the source of truth for conversations and messages.
+Redis SignalR scale-out remains a later infrastructure slice; PostgreSQL is the source of truth
+for conversations and messages.
+
+Planning records integration events in its PostgreSQL transactional outbox. RabbitMQ delivery
+is opt-in locally and requires the broker URI to come from environment configuration:
+
+```powershell
+$env:MessageBroker__Enabled="true"
+$env:MessageBroker__Uri="amqps://<user>:<password>@<host>/<vhost>"
+```
+
+Publisher confirms are enabled, and failed deliveries remain in the outbox for retry. No broker
+credentials are stored in source control.
