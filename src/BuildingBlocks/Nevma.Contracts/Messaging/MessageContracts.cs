@@ -19,7 +19,10 @@ public sealed record AddConversationParticipantRequest(Guid UserId);
 
 public sealed record PresenceResponse(Guid UserId, bool IsOnline, DateTimeOffset? LastSeenAt);
 
-public sealed record SendMessageRequest(string Text, Guid? ReplyToMessageId = null);
+public sealed record SendMessageRequest(
+    string Text,
+    Guid? ReplyToMessageId = null,
+    IReadOnlyCollection<Guid>? AttachmentIds = null);
 
 public sealed record EditMessageRequest(string Text);
 
@@ -36,7 +39,8 @@ public sealed record MessageResponse(
     DateTimeOffset SentAt,
     Guid? ReplyToMessageId = null,
     DateTimeOffset? EditedAt = null,
-    DateTimeOffset? DeletedAt = null);
+    DateTimeOffset? DeletedAt = null,
+    IReadOnlyCollection<Guid>? AttachmentIds = null);
 
 public sealed record MessageReceiptResponse(
     Guid MessageId,

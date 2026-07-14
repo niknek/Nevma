@@ -43,6 +43,18 @@ public static class FileEndpoints
             return Results.Ok(await service.ListAsync(userId, cancellationToken));
         });
 
+        files.MapGet("/{id:guid}", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            FileAssetService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+                return Results.Unauthorized();
+            var file = await service.GetAsync(id, userId, cancellationToken);
+            return file is null ? Results.NotFound() : Results.Ok(file);
+        });
+
         files.MapGet("/{id:guid}/content", async (
             Guid id,
             ClaimsPrincipal principal,

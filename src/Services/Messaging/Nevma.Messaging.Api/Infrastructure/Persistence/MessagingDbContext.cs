@@ -17,6 +17,7 @@ public sealed class MessagingDbContext(DbContextOptions<MessagingDbContext> opti
     public DbSet<Message> Messages => Set<Message>();
     public DbSet<MessageReceipt> MessageReceipts => Set<MessageReceipt>();
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
+    public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)

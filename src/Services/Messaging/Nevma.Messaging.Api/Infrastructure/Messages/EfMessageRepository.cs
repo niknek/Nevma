@@ -11,7 +11,8 @@ public sealed class EfMessageRepository(MessagingDbContext dbContext) : IMessage
         await dbContext.Messages.AddAsync(message, cancellationToken);
 
     public Task<Message?> GetAsync(Guid messageId, CancellationToken cancellationToken = default) =>
-        dbContext.Messages.SingleOrDefaultAsync(message => message.Id == messageId, cancellationToken);
+        dbContext.Messages.Include(message => message.Attachments)
+            .SingleOrDefaultAsync(message => message.Id == messageId, cancellationToken);
 
     public async Task<IReadOnlyList<Message>> ListAsync(
         Guid conversationId,
@@ -21,6 +22,7 @@ public sealed class EfMessageRepository(MessagingDbContext dbContext) : IMessage
     {
         var query = dbContext.Messages
             .AsNoTracking()
+            .Include(message => message.Attachments)
             .Where(message => message.ConversationId == conversationId);
         if (beforeSequence is not null)
             query = query.Where(message => message.Sequence < beforeSequence);

@@ -17,4 +17,7 @@ public interface IConversationRepository
         Guid firstUserId,
         Guid secondUserId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Guid>> ListParticipantIdsAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken = default);
 }

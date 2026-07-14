@@ -8,7 +8,8 @@ public sealed class MessageService(
     IMessageRepository messageRepository,
     IConversationRepository conversationRepository,
     IMessagingUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IFileAttachmentAuthorizer? fileAttachmentAuthorizer = null)
 {
     public async Task<MessagePageResponse?> GetMessagesAsync(
         Guid conversationId,
@@ -38,13 +39,33 @@ public sealed class MessageService(
         Guid senderId,
         SendMessageRequest request,
         CancellationToken cancellationToken = default)
+        => await SendAsync(conversationId, senderId, request, string.Empty, cancellationToken);
+
+    public async Task<SendMessageResult> SendAsync(
+        Guid conversationId,
+        Guid senderId,
+        SendMessageRequest request,
+        string accessToken,
+        CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Text))
-            return new SendMessageResult.Invalid("text", "Message text is required.");
-        if (request.Text.Length > 4_000)
+        var text = request.Text ?? string.Empty;
+        var attachmentIds = (request.AttachmentIds ?? []).Distinct().ToArray();
+        if (string.IsNullOrWhiteSpace(text) && attachmentIds.Length == 0)
+            return new SendMessageResult.Invalid("text", "Message text or an attachment is required.");
+        if (text.Length > 4_000)
             return new SendMessageResult.Invalid("text", "Message text cannot exceed 4000 characters.");
+        if (attachmentIds.Length > 10 || attachmentIds.Any(id => id == Guid.Empty))
+            return new SendMessageResult.Invalid("attachmentIds", "A message can contain up to 10 valid attachments.");
         if (!await conversationRepository.IsParticipantAsync(conversationId, senderId, cancellationToken))
             return new SendMessageResult.NotFound();
+
+        if (attachmentIds.Length > 0)
+        {
+            var participants = await conversationRepository.ListParticipantIdsAsync(conversationId, cancellationToken);
+            if (fileAttachmentAuthorizer is null || !await fileAttachmentAuthorizer.AuthorizeAsync(
+                attachmentIds, senderId, participants, accessToken, cancellationToken))
+                return new SendMessageResult.Invalid("attachmentIds", "One or more attachments are unavailable.");
+        }
 
         if (request.ReplyToMessageId is not null)
         {
@@ -56,8 +77,9 @@ public sealed class MessageService(
         var message = Message.Create(
             conversationId,
             senderId,
-            request.Text,
+            text,
             request.ReplyToMessageId,
+            attachmentIds,
             timeProvider.GetUtcNow());
         await messageRepository.AddAsync(message, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -202,7 +224,8 @@ public sealed class MessageService(
             message.SentAt,
             message.ReplyToMessageId,
             message.EditedAt,
-            message.DeletedAt);
+            message.DeletedAt,
+            message.Attachments.Select(attachment => attachment.FileAssetId).ToArray());
 }
 
 public abstract record MessageChangeResult

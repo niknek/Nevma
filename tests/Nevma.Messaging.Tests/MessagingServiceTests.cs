@@ -237,6 +237,34 @@ public sealed class MessagingServiceTests
         Assert.IsType<MessageChangeResult.Forbidden>(result);
     }
 
+    [Fact]
+    public async Task Authorized_file_can_be_sent_as_an_attachment_without_text()
+    {
+        await using var context = CreateContext();
+        var conversationService = CreateConversationService(context);
+        var authorizer = new FakeFileAuthorizer();
+        var messageService = new MessageService(
+            new EfMessageRepository(context),
+            new EfConversationRepository(context),
+            context,
+            new FixedTimeProvider(Now),
+            authorizer);
+        var senderId = Guid.NewGuid();
+        var conversation = await conversationService.CreateAsync(senderId, PersonalConversation(Guid.NewGuid()));
+        var fileId = Guid.NewGuid();
+
+        var result = await messageService.SendAsync(
+            conversation.Conversation!.Id,
+            senderId,
+            new SendMessageRequest(string.Empty, null, [fileId]),
+            "access-token");
+
+        var sent = Assert.IsType<SendMessageResult.Sent>(result);
+        Assert.Equal([fileId], sent.Message.AttachmentIds);
+        Assert.True(authorizer.Called);
+        Assert.Equal(1, await context.MessageAttachments.CountAsync());
+    }
+
     private static ConversationService CreateConversationService(MessagingDbContext context) =>
         new(new EfConversationRepository(context), context, new FixedTimeProvider(Now));
 
@@ -274,5 +302,20 @@ public sealed class MessagingServiceTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class FakeFileAuthorizer : IFileAttachmentAuthorizer
+    {
+        public bool Called { get; private set; }
+        public Task<bool> AuthorizeAsync(
+            IReadOnlyCollection<Guid> fileIds,
+            Guid senderId,
+            IReadOnlyCollection<Guid> participantIds,
+            string accessToken,
+            CancellationToken cancellationToken = default)
+        {
+            Called = true;
+            return Task.FromResult(accessToken == "access-token");
+        }
     }
 }

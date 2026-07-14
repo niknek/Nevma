@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Nevma.Messaging.Api.Domain.Conversations;
 using Nevma.Messaging.Api.Domain.Messages;
@@ -30,5 +31,20 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
             .WithMany()
             .HasForeignKey(message => message.ReplyToMessageId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasMany(message => message.Attachments)
+            .WithOne()
+            .HasForeignKey(attachment => attachment.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(message => message.Attachments).UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
+
+public sealed class MessageAttachmentConfiguration : IEntityTypeConfiguration<MessageAttachment>
+{
+    public void Configure(EntityTypeBuilder<MessageAttachment> builder)
+    {
+        builder.ToTable("message_attachments", "messaging");
+        builder.HasKey(attachment => new { attachment.MessageId, attachment.FileAssetId });
+        builder.HasIndex(attachment => attachment.FileAssetId);
     }
 }

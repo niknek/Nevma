@@ -34,12 +34,15 @@ public static class DependencyInjection
             provider.GetRequiredService<MessagingDbContext>());
         services.AddScoped<IConversationRepository, EfConversationRepository>();
         services.AddScoped<IMessageRepository, EfMessageRepository>();
+        services.AddScoped<IFileAttachmentAuthorizer, HttpFileAttachmentAuthorizer>();
         services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
         services.AddScoped<IUserRealtimePublisher, SignalRUserRealtimePublisher>();
         services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
         services.AddScoped<PlanningEventHandler>();
+        services.AddHttpClient("Files", client =>
+            client.BaseAddress = new Uri(configuration["Services:Files"] ?? "http://localhost:5106"));
 
         var brokerOptions = configuration
             .GetSection(MessageBrokerOptions.SectionName)

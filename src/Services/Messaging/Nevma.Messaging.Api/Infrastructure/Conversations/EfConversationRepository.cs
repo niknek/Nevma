@@ -61,4 +61,12 @@ public sealed class EfConversationRepository(MessagingDbContext dbContext) : ICo
                 conversation.Participants.Any(participant => participant.UserId == firstUserId) &&
                 conversation.Participants.Any(participant => participant.UserId == secondUserId),
             cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> ListParticipantIdsAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.ConversationParticipants.AsNoTracking()
+            .Where(participant => participant.ConversationId == conversationId)
+            .Select(participant => participant.UserId)
+            .ToListAsync(cancellationToken);
 }

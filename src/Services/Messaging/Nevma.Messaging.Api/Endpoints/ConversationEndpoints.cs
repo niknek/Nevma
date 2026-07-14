@@ -131,6 +131,7 @@ public static class ConversationEndpoints
         conversations.MapPost("/{conversationId:guid}/messages", async (
             Guid conversationId,
             SendMessageRequest request,
+            HttpRequest httpRequest,
             ClaimsPrincipal principal,
             MessageService service,
             IHubContext<ChatHub> hub,
@@ -143,6 +144,7 @@ public static class ConversationEndpoints
                 conversationId,
                 senderId,
                 request,
+                GetAccessToken(httpRequest),
                 cancellationToken);
             if (result is SendMessageResult.NotFound)
                 return Results.NotFound();
@@ -284,6 +286,15 @@ public static class ConversationEndpoints
 
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid userId) =>
         Guid.TryParse(principal.FindFirstValue("sub"), out userId);
+
+    private static string GetAccessToken(HttpRequest request)
+    {
+        const string prefix = "Bearer ";
+        var value = request.Headers.Authorization.ToString();
+        return value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? value[prefix.Length..].Trim()
+            : string.Empty;
+    }
 
     private static IResult MapMessageChangeFailure(MessageChangeResult result) =>
         result switch

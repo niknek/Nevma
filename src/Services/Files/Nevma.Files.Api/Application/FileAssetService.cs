@@ -65,6 +65,12 @@ public sealed class FileAssetService(
     public async Task<IReadOnlyList<FileAssetResponse>> ListAsync(Guid userId, CancellationToken cancellationToken = default) =>
         (await repository.ListAsync(userId, cancellationToken)).Select(ToResponse).ToArray();
 
+    public async Task<FileAssetResponse?> GetAsync(Guid id, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var asset = await repository.GetAsync(id, cancellationToken);
+        return asset is null || !asset.CanRead(userId) ? null : ToResponse(asset);
+    }
+
     public async Task<FileDownloadResult> OpenAsync(Guid id, Guid userId, CancellationToken cancellationToken = default)
     {
         var asset = await repository.GetAsync(id, cancellationToken);
