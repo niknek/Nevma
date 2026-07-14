@@ -6,7 +6,7 @@ using Nevma.ServiceDefaults.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddNevmaServiceDefaults();
+builder.Services.AddNevmaServiceDefaults(builder.Configuration);
 builder.Services.AddSignalR(options => options.MaximumReceiveMessageSize = 32 * 1024);
 builder.Services.AddMessagingService(builder.Configuration);
 

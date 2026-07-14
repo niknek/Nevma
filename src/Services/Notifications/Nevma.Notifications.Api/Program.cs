@@ -5,7 +5,7 @@ using Nevma.ServiceDefaults.Extensions;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddNevmaServiceDefaults();
+builder.Services.AddNevmaServiceDefaults(builder.Configuration);
 builder.Services.AddNotificationsService(builder.Configuration);
 
 var app = builder.Build();

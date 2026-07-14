@@ -9,6 +9,8 @@ Voice-first planning and collaboration platform.
 - `Nevma.Planning.Api`: calendar, meeting invitations, tasks, and reminders.
 - `Nevma.Messaging.Api`: conversations and SignalR realtime messaging.
 - `Nevma.Notifications.Api`: notification inbox, protected push devices, and delivery workers.
+- `Nevma.Files.Api`: private file storage, validation, scanning, and access grants.
+- `Nevma.Commands.Api`: voice/text command previews, confirmation, execution, audit, and undo.
 - `Nevma.Contracts`: versioned integration contracts shared between services.
 - `Nevma.ServiceDefaults`: shared HTTP error handling, correlation IDs, security headers,
   health checks, and reusable result primitives. It contains no business rules.
@@ -30,6 +32,8 @@ dotnet run --project src/Services/Identity/Nevma.Identity.Api
 dotnet run --project src/Services/Planning/Nevma.Planning.Api
 dotnet run --project src/Services/Messaging/Nevma.Messaging.Api
 dotnet run --project src/Services/Notifications/Nevma.Notifications.Api
+dotnet run --project src/Services/Files/Nevma.Files.Api
+dotnet run --project src/Services/Commands/Nevma.Commands.Api
 dotnet run --project src/Gateway/Nevma.Gateway
 ```
 
@@ -94,6 +98,43 @@ provider errors such as an unregistered target.
 
 Redis SignalR scale-out remains a later infrastructure slice; PostgreSQL is the source of truth
 for conversations and messages.
+
+Files and Commands own the `files` and `commands` schemas respectively. Their credentials must
+also be supplied outside source control before applying migrations:
+
+```powershell
+$env:ConnectionStrings__FilesDatabase="Host=localhost;Database=nevma_files;Username=nevma_files;Password=<secret>"
+$env:ConnectionStrings__CommandsDatabase="Host=localhost;Database=nevma_commands;Username=nevma_commands;Password=<secret>"
+dotnet ef database update --project src/Services/Files/Nevma.Files.Api
+dotnet ef database update --project src/Services/Commands/Nevma.Commands.Api
+```
+
+The default file adapter stores content under the service's private `App_Data/files` directory;
+production should configure `FileStorage__RootPath` to an encrypted private volume or replace
+`IFileStorage` with private object storage. Uploads are capped at 25 MB and validated by extension,
+MIME type, file signature, SHA-256, authorization, and the configured scanner adapter.
+
+Commands never execute directly from raw voice text. `/api/commands/preview` creates a durable
+structured plan, `/confirm` executes it with the authenticated user's token, and `/undo` reverses
+supported operations. Raw transcripts are not persisted; the audit record stores their hash.
+
+## Gateway and observability
+
+The Gateway applies strict configured CORS, per-IP rate limiting, request-size limits, correlation
+IDs, security headers, and reverse-proxy routing. Replace `Cors__AllowedOrigins` in every deployed
+environment; do not use wildcard origins with credentials.
+
+All deployables collect ASP.NET Core, HTTP client, runtime, trace, metric, and structured log
+telemetry. OTLP export is disabled by default and can be enabled without code changes:
+
+```powershell
+$env:OpenTelemetry__Otlp__Enabled="true"
+$env:OpenTelemetry__Otlp__Endpoint="https://otel-collector.example.com:4317"
+```
+
+Run database migrations as a controlled deployment step before starting each service. Back up each
+service database independently, persist Data Protection keys, rotate secrets, and alert on health,
+outbox backlog, dead-letter queues, push failures, elevated 401/403/429 rates, and command failures.
 
 Planning records integration events in its PostgreSQL transactional outbox. RabbitMQ delivery
 is opt-in locally and requires the broker URI to come from environment configuration:
