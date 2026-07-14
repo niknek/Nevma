@@ -32,7 +32,7 @@ dotnet run --project src/Gateway/Nevma.Gateway
 ```
 
 Planning and Messaging stores are still intentionally in memory. Redis, durable messaging,
-authentication, and the transactional outbox will be introduced in later backend slices.
+and the transactional outbox will be introduced in later backend slices.
 
 The Identity service now owns a PostgreSQL schema named `identity`. Supply its password and
 other environment-specific values outside source control, for example:
@@ -41,3 +41,10 @@ other environment-specific values outside source control, for example:
 $env:ConnectionStrings__IdentityDatabase="Host=localhost;Port=5432;Database=nevma_identity;Username=nevma_identity;Password=<secret>"
 dotnet ef database update --project src/Services/Identity/Nevma.Identity.Api
 ```
+
+Identity uses ASP.NET Core Identity for password hashing and OpenIddict for OAuth 2.0/OpenID
+Connect. The mobile client uses authorization code flow with PKCE through `/connect/authorize`
+and `/connect/token`; there is no endpoint that directly turns a password into an access token.
+Development seeds the public `nevma-mobile` client. Non-development environments must provide
+signing and encryption PFX certificates through the `Authentication__*CertificatePath` and
+`Authentication__*CertificatePassword` configuration keys.

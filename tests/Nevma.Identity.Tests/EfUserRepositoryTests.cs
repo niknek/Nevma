@@ -18,7 +18,7 @@ public sealed class EfUserRepositoryTests
         await using (var writeContext = new IdentityDbContext(options))
         {
             var repository = new EfUserRepository(writeContext);
-            var user = User.Create("Nikos", null, DateTimeOffset.UtcNow);
+            var user = User.Create(Guid.NewGuid(), "Nikos", null, DateTimeOffset.UtcNow);
             userId = user.Id;
 
             await repository.AddAsync(user);

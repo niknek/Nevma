@@ -15,6 +15,6 @@ public sealed class User
     public string? AvatarUrl { get; }
     public DateTimeOffset CreatedAt { get; }
 
-    public static User Create(string displayName, string? avatarUrl, DateTimeOffset createdAt) =>
-        new(Guid.NewGuid(), displayName.Trim(), avatarUrl?.Trim(), createdAt);
+    public static User Create(Guid id, string displayName, string? avatarUrl, DateTimeOffset createdAt) =>
+        new(id, displayName.Trim(), avatarUrl?.Trim(), createdAt);
 }

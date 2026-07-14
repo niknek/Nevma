@@ -1,0 +1,72 @@
+using System.Net;
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Nevma.Contracts.Identity;
+
+namespace Nevma.Identity.Tests;
+
+public sealed class IdentityApiTests
+{
+    [Fact]
+    public async Task Register_creates_an_account_but_me_requires_a_token()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+
+        var register = await client.PostAsJsonAsync("/api/auth/register", new RegisterUserRequest(
+            "maria@example.com",
+            "Strong!Password123",
+            "Maria",
+            null));
+        var me = await client.GetAsync("/api/users/me");
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, me.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_page_contains_antiforgery_and_security_headers()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+
+        var response = await client.GetAsync("/account/login?returnUrl=%2Fconnect%2Fauthorize");
+        var html = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("__RequestVerificationToken", html, StringComparison.Ordinal);
+        Assert.Contains("form-action 'self'", response.Headers.GetValues("Content-Security-Policy").Single());
+    }
+
+    [Fact]
+    public async Task Token_endpoint_is_rate_limited()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+        HttpResponseMessage? response = null;
+
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            response?.Dispose();
+            response = await client.PostAsync(
+                "/connect/token",
+                new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["client_id"] = "invalid"
+                }));
+        }
+
+        using var finalResponse = response ?? throw new InvalidOperationException("No token response was received.");
+        Assert.Equal(HttpStatusCode.TooManyRequests, finalResponse.StatusCode);
+    }
+
+    private static HttpClient CreateClient(IdentityApiFactory factory) =>
+        factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+            AllowAutoRedirect = false
+        });
+}

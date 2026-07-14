@@ -47,6 +47,25 @@ public sealed class SolutionStructureTests
         }
     }
 
+    [Fact]
+    public void Application_layers_do_not_depend_on_infrastructure_namespaces()
+    {
+        var root = FindRepositoryRoot();
+        var applicationFiles = Directory.GetFiles(
+            Path.Combine(root, "src", "Services"),
+            "*.cs",
+            SearchOption.AllDirectories)
+            .Where(path => path.Contains(
+                $"{Path.DirectorySeparatorChar}Application{Path.DirectorySeparatorChar}",
+                StringComparison.OrdinalIgnoreCase));
+
+        foreach (var file in applicationFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain(".Infrastructure", source, StringComparison.Ordinal);
+        }
+    }
+
     private static string[] ReadProjectReferences(string project)
     {
         var projectDirectory = Path.GetDirectoryName(project)

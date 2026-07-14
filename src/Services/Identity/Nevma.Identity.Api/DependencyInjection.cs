@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Nevma.Identity.Api.Application;
+using Nevma.Identity.Api.Application.Authentication;
 using Nevma.Identity.Api.Application.Users;
+using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 using Nevma.Identity.Api.Infrastructure.Users;
 
@@ -10,7 +11,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddIdentityService(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
         services.AddSingleton(TimeProvider.System);
         services.AddDbContext<IdentityDbContext>(options =>
@@ -21,9 +23,11 @@ public static class DependencyInjection
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
                     npgsqlOptions.EnableRetryOnFailure();
                 }));
-        services.AddScoped<IIdentityUnitOfWork>(provider => provider.GetRequiredService<IdentityDbContext>());
+        services.AddNevmaAuthentication(configuration, environment);
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<UserService>();
+        services.AddScoped<IRegistrationService, RegistrationService>();
+        services.AddHostedService<OpenIddictSeeder>();
         return services;
     }
 }

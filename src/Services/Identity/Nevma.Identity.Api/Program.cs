@@ -6,7 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddNevmaServiceDefaults();
-builder.Services.AddIdentityService(builder.Configuration);
+builder.Services.AddIdentityService(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 
@@ -16,7 +16,16 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseNevmaServiceDefaults();
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseAntiforgery();
 app.MapHealthChecks("/health");
+app.MapAccountEndpoints();
+app.MapAuthenticationEndpoints();
+app.MapOpenIddictEndpoints();
 app.MapUserEndpoints();
 
 app.Run();
+
+public partial class Program;

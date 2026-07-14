@@ -19,6 +19,8 @@ public sealed class SecurityHeadersMiddlewareTests
         Assert.Equal("DENY", context.Response.Headers.XFrameOptions);
         Assert.Equal("no-referrer", context.Response.Headers["Referrer-Policy"]);
         Assert.Equal("camera=(), geolocation=(), microphone=()", context.Response.Headers["Permissions-Policy"]);
-        Assert.Equal("default-src 'none'; frame-ancestors 'none'", context.Response.Headers.ContentSecurityPolicy);
+        Assert.Equal(
+            "default-src 'none'; form-action 'self'; frame-ancestors 'none'",
+            context.Response.Headers.ContentSecurityPolicy);
     }
 }
