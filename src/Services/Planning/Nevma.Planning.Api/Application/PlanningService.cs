@@ -1,3 +1,4 @@
+using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Planning.Api.Domain.Calendar;
 using Nevma.Planning.Api.Domain.MeetingInvitations;
@@ -7,6 +8,7 @@ namespace Nevma.Planning.Api.Application;
 public sealed class PlanningService(
     IPlanningRepository repository,
     IPlanningUnitOfWork unitOfWork,
+    IPlanningEventOutbox outbox,
     TimeProvider timeProvider)
 {
     public async Task<CreateInvitationResult> CreateInvitationAsync(
@@ -18,6 +20,7 @@ public sealed class PlanningService(
         if (errors.Count > 0)
             return CreateInvitationResult.Failure(errors);
 
+        var now = timeProvider.GetUtcNow();
         var invitation = MeetingInvitation.Create(
             organizerId,
             request.InviteeId,
@@ -26,9 +29,10 @@ public sealed class PlanningService(
             request.Duration,
             request.Location,
             request.Message,
-            timeProvider.GetUtcNow());
+            now);
 
         await repository.AddInvitationAsync(invitation, cancellationToken);
+        AddInvitationChangedEvent(invitation, null, now);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return CreateInvitationResult.Success(ToResponse(invitation));
     }
@@ -108,6 +112,7 @@ public sealed class PlanningService(
             calendarEvent.Reschedule(invitation, now);
         }
 
+        AddInvitationChangedEvent(invitation, calendarEvent.Id, now);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return new AcceptInvitationResult.Accepted(ToResponse(calendarEvent));
     }
@@ -181,6 +186,7 @@ public sealed class PlanningService(
 
         var calendarEvent = await repository.GetCalendarEventAsync(invitation.Id, cancellationToken);
         calendarEvent?.Cancel(now);
+        AddInvitationChangedEvent(invitation, calendarEvent?.Id, now);
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -265,6 +271,7 @@ public sealed class PlanningService(
         if (outcome == InvitationDecision.AlreadyHandled)
             return new InvitationActionResult.AlreadyHandled();
 
+        AddInvitationChangedEvent(invitation, null, timeProvider.GetUtcNow());
         try
         {
             await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -276,6 +283,26 @@ public sealed class PlanningService(
 
         return new InvitationActionResult.Updated(ToResponse(invitation));
     }
+
+    private void AddInvitationChangedEvent(
+        MeetingInvitation invitation,
+        Guid? calendarEventId,
+        DateTimeOffset occurredAt) =>
+        outbox.Add(new MeetingInvitationChangedIntegrationEvent(
+            Guid.NewGuid(),
+            invitation.Id,
+            invitation.OrganizerId,
+            invitation.InviteeId,
+            invitation.Title,
+            invitation.StartsAt,
+            invitation.Duration,
+            invitation.Location,
+            (MeetingInvitationStatus)invitation.Status,
+            invitation.ProposedStartsAt,
+            invitation.ProposedDuration,
+            invitation.ProposedLocation,
+            calendarEventId,
+            occurredAt));
 
     private static MeetingInvitationResponse ToResponse(MeetingInvitation invitation) =>
         new(

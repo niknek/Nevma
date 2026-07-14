@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Planning.Api.Application;
 using Nevma.Planning.Api.Domain.MeetingInvitations;
 using Nevma.Planning.Api.Infrastructure;
 using Nevma.Planning.Api.Infrastructure.Persistence;
+using Nevma.Planning.Api.Infrastructure.Outbox;
 
 namespace Nevma.Planning.Tests;
 
@@ -25,6 +28,40 @@ public sealed class PlanningServiceTests
         Assert.True(result.IsSuccess);
         Assert.Equal(organizerId, result.Invitation!.OrganizerId);
         Assert.Equal(1, await context.MeetingInvitations.CountAsync());
+    }
+
+    [Fact]
+    public async Task Invitation_change_is_written_to_the_transactional_outbox()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var inviteeId = Guid.NewGuid();
+
+        var created = await service.CreateInvitationAsync(Guid.NewGuid(), CreateRequest(inviteeId));
+        await service.AcceptInvitationAsync(created.Invitation!.Id, inviteeId);
+
+        var messages = await context.OutboxMessages.OrderBy(message => message.OccurredAt).ToListAsync();
+        Assert.Equal(2, messages.Count);
+        Assert.All(messages, message => Assert.Equal(
+            PlanningIntegrationEventTypes.MeetingInvitationChanged,
+            message.Type));
+        using var payload = JsonDocument.Parse(messages[0].Payload);
+        Assert.Equal("pending", payload.RootElement.GetProperty("status").GetString());
+        Assert.False(payload.RootElement.TryGetProperty("message", out _));
+        Assert.Equal(1, await context.CalendarEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Forbidden_invitation_action_does_not_write_an_outbox_event()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var created = await service.CreateInvitationAsync(Guid.NewGuid(), CreateRequest(Guid.NewGuid()));
+
+        var result = await service.AcceptInvitationAsync(created.Invitation!.Id, Guid.NewGuid());
+
+        Assert.IsType<AcceptInvitationResult.Forbidden>(result);
+        Assert.Equal(1, await context.OutboxMessages.CountAsync());
     }
 
     [Fact]
@@ -262,7 +299,11 @@ public sealed class PlanningServiceTests
     }
 
     private static PlanningService CreateService(PlanningDbContext context) =>
-        new(new EfPlanningRepository(context), context, new FixedTimeProvider(Now));
+        new(
+            new EfPlanningRepository(context),
+            context,
+            new EfPlanningEventOutbox(context),
+            new FixedTimeProvider(Now));
 
     private static PlanningDbContext CreateContext()
     {

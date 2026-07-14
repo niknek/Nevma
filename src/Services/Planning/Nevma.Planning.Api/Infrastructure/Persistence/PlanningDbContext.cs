@@ -4,6 +4,7 @@ using Nevma.Planning.Api.Application;
 using Nevma.Planning.Api.Domain.Calendar;
 using Nevma.Planning.Api.Domain.MeetingInvitations;
 using Nevma.Planning.Api.Domain.Tasks;
+using Nevma.Planning.Api.Infrastructure.Outbox;
 using Npgsql;
 
 namespace Nevma.Planning.Api.Infrastructure.Persistence;
@@ -14,6 +15,7 @@ public sealed class PlanningDbContext(DbContextOptions<PlanningDbContext> option
     public DbSet<MeetingInvitation> MeetingInvitations => Set<MeetingInvitation>();
     public DbSet<CalendarEvent> CalendarEvents => Set<CalendarEvent>();
     public DbSet<TaskItem> Tasks => Set<TaskItem>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
