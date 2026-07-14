@@ -23,6 +23,30 @@ public sealed class EfPlanningRepository(PlanningDbContext dbContext) : IPlannin
         CancellationToken cancellationToken = default) =>
         await dbContext.CalendarEvents.AddAsync(calendarEvent, cancellationToken);
 
+    public Task<CalendarEvent?> GetCalendarEventAsync(
+        Guid invitationId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.CalendarEvents.SingleOrDefaultAsync(
+            calendarEvent => calendarEvent.InvitationId == invitationId,
+            cancellationToken);
+
+    public Task<bool> HasCalendarConflictAsync(
+        Guid firstParticipantId,
+        Guid secondParticipantId,
+        DateTimeOffset startsAt,
+        DateTimeOffset endsAt,
+        Guid? excludedEventId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.CalendarEvents.AnyAsync(
+            calendarEvent =>
+                calendarEvent.Status == CalendarEventStatus.Confirmed &&
+                calendarEvent.Id != excludedEventId &&
+                calendarEvent.StartsAt < endsAt &&
+                calendarEvent.EndsAt > startsAt &&
+                (calendarEvent.ParticipantIds.Contains(firstParticipantId) ||
+                 calendarEvent.ParticipantIds.Contains(secondParticipantId)),
+            cancellationToken);
+
     public async Task<IReadOnlyList<CalendarEvent>> GetCalendarAsync(
         Guid userId,
         DateTimeOffset from,
@@ -31,9 +55,10 @@ public sealed class EfPlanningRepository(PlanningDbContext dbContext) : IPlannin
         await dbContext.CalendarEvents
             .AsNoTracking()
             .Where(calendarEvent =>
+                calendarEvent.Status == CalendarEventStatus.Confirmed &&
                 calendarEvent.ParticipantIds.Contains(userId) &&
-                calendarEvent.StartsAt >= from &&
-                calendarEvent.StartsAt < to)
+                calendarEvent.StartsAt < to &&
+                calendarEvent.EndsAt > from)
             .OrderBy(calendarEvent => calendarEvent.StartsAt)
             .ToListAsync(cancellationToken);
 }

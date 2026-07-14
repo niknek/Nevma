@@ -53,28 +53,62 @@ public sealed class PlanningService(
         Guid actorId,
         CancellationToken cancellationToken = default)
     {
-        var invitation = await repository.GetInvitationAsync(invitationId, cancellationToken);
-        if (invitation is null)
-            return new AcceptInvitationResult.NotFound();
-
-        var outcome = invitation.Accept(actorId, timeProvider.GetUtcNow());
-        if (outcome == AcceptOutcome.Forbidden)
-            return new AcceptInvitationResult.Forbidden();
-        if (outcome == AcceptOutcome.AlreadyHandled)
-            return new AcceptInvitationResult.AlreadyHandled();
-
-        var calendarEvent = CalendarEvent.FromAcceptedInvitation(invitation);
-        await repository.AddCalendarEventAsync(calendarEvent, cancellationToken);
-
         try
         {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
+            return await unitOfWork.ExecuteSerializableAsync(
+                operationCancellationToken => AcceptInvitationCoreAsync(
+                    invitationId,
+                    actorId,
+                    operationCancellationToken),
+                cancellationToken);
         }
         catch (PlanningConcurrencyException)
         {
             return new AcceptInvitationResult.AlreadyHandled();
         }
+    }
 
+    private async Task<AcceptInvitationResult> AcceptInvitationCoreAsync(
+        Guid invitationId,
+        Guid actorId,
+        CancellationToken cancellationToken)
+    {
+        var invitation = await repository.GetInvitationAsync(invitationId, cancellationToken);
+        if (invitation is null)
+            return new AcceptInvitationResult.NotFound();
+
+        var outcome = invitation.CanAccept(actorId);
+        if (outcome == AcceptOutcome.Forbidden)
+            return new AcceptInvitationResult.Forbidden();
+        if (outcome == AcceptOutcome.AlreadyHandled)
+            return new AcceptInvitationResult.AlreadyHandled();
+
+        var now = timeProvider.GetUtcNow();
+        var calendarEvent = await repository.GetCalendarEventAsync(invitation.Id, cancellationToken);
+        if (await repository.HasCalendarConflictAsync(
+            invitation.OrganizerId,
+            invitation.InviteeId,
+            invitation.AcceptanceStartsAt,
+            invitation.AcceptanceStartsAt.Add(invitation.AcceptanceDuration),
+            calendarEvent?.Id,
+            cancellationToken))
+        {
+            return new AcceptInvitationResult.CalendarConflict();
+        }
+
+        invitation.Accept(actorId, now);
+
+        if (calendarEvent is null)
+        {
+            calendarEvent = CalendarEvent.FromAcceptedInvitation(invitation, now);
+            await repository.AddCalendarEventAsync(calendarEvent, cancellationToken);
+        }
+        else
+        {
+            calendarEvent.Reschedule(invitation, now);
+        }
+
+        await unitOfWork.SaveChangesAsync(cancellationToken);
         return new AcceptInvitationResult.Accepted(ToResponse(calendarEvent));
     }
 
@@ -108,6 +142,56 @@ public sealed class PlanningService(
             cancellationToken);
     }
 
+    public async Task<InvitationActionResult> ProposeRescheduleAsync(
+        Guid invitationId,
+        Guid actorId,
+        RescheduleMeetingRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var errors = ValidateSchedule(request.StartsAt, request.Duration, request.Location, timeProvider.GetUtcNow());
+        if (errors.Count > 0)
+            return new InvitationActionResult.ValidationFailed(errors);
+
+        return await RespondAsync(
+            invitationId,
+            invitation => invitation.ProposeReschedule(
+                actorId,
+                request.StartsAt,
+                request.Duration,
+                request.Location,
+                timeProvider.GetUtcNow()),
+            cancellationToken);
+    }
+
+    public async Task<InvitationActionResult> CancelInvitationAsync(
+        Guid invitationId,
+        Guid actorId,
+        CancellationToken cancellationToken = default)
+    {
+        var invitation = await repository.GetInvitationAsync(invitationId, cancellationToken);
+        if (invitation is null)
+            return new InvitationActionResult.NotFound();
+
+        var now = timeProvider.GetUtcNow();
+        var outcome = invitation.Cancel(actorId, now);
+        if (outcome == InvitationDecision.Forbidden)
+            return new InvitationActionResult.Forbidden();
+        if (outcome == InvitationDecision.AlreadyHandled)
+            return new InvitationActionResult.AlreadyHandled();
+
+        var calendarEvent = await repository.GetCalendarEventAsync(invitation.Id, cancellationToken);
+        calendarEvent?.Cancel(now);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (PlanningConcurrencyException)
+        {
+            return new InvitationActionResult.AlreadyHandled();
+        }
+        return new InvitationActionResult.Updated(ToResponse(invitation));
+    }
+
     public async Task<IReadOnlyCollection<CalendarEventResponse>> GetCalendarAsync(
         Guid userId,
         DateTimeOffset from,
@@ -136,6 +220,10 @@ public sealed class PlanningService(
             errors[nameof(request.StartsAt)] = ["Start time must be in the future."];
         if (request.Duration <= TimeSpan.Zero || request.Duration > TimeSpan.FromDays(1))
             errors[nameof(request.Duration)] = ["Duration must be greater than zero and at most 24 hours."];
+        if (request.Location?.Length > 500)
+            errors[nameof(request.Location)] = ["Location cannot exceed 500 characters."];
+        if (request.Message?.Length > 2_000)
+            errors[nameof(request.Message)] = ["Message cannot exceed 2000 characters."];
         return errors;
     }
 
@@ -143,13 +231,22 @@ public sealed class PlanningService(
         CounterProposeMeetingInvitationRequest request,
         DateTimeOffset now)
     {
+        return ValidateSchedule(request.StartsAt, request.Duration, request.Location, now);
+    }
+
+    private static Dictionary<string, string[]> ValidateSchedule(
+        DateTimeOffset startsAt,
+        TimeSpan duration,
+        string? location,
+        DateTimeOffset now)
+    {
         var errors = new Dictionary<string, string[]>();
-        if (request.StartsAt <= now)
-            errors[nameof(request.StartsAt)] = ["Start time must be in the future."];
-        if (request.Duration <= TimeSpan.Zero || request.Duration > TimeSpan.FromDays(1))
-            errors[nameof(request.Duration)] = ["Duration must be greater than zero and at most 24 hours."];
-        if (request.Location?.Length > 500)
-            errors[nameof(request.Location)] = ["Location cannot exceed 500 characters."];
+        if (startsAt <= now)
+            errors[nameof(RescheduleMeetingRequest.StartsAt)] = ["Start time must be in the future."];
+        if (duration <= TimeSpan.Zero || duration > TimeSpan.FromDays(1))
+            errors[nameof(RescheduleMeetingRequest.Duration)] = ["Duration must be greater than zero and at most 24 hours."];
+        if (location?.Length > 500)
+            errors[nameof(RescheduleMeetingRequest.Location)] = ["Location cannot exceed 500 characters."];
         return errors;
     }
 
@@ -205,7 +302,10 @@ public sealed class PlanningService(
             calendarEvent.StartsAt,
             calendarEvent.EndsAt,
             calendarEvent.Location,
-            calendarEvent.ParticipantIds);
+            calendarEvent.ParticipantIds,
+            (Nevma.Contracts.Planning.CalendarEventStatus)calendarEvent.Status,
+            calendarEvent.UpdatedAt,
+            calendarEvent.CancelledAt);
 }
 
 public sealed record CreateInvitationResult(
@@ -234,6 +334,7 @@ public abstract record AcceptInvitationResult
     public sealed record NotFound : AcceptInvitationResult;
     public sealed record Forbidden : AcceptInvitationResult;
     public sealed record AlreadyHandled : AcceptInvitationResult;
+    public sealed record CalendarConflict : AcceptInvitationResult;
 }
 
 public abstract record InvitationActionResult

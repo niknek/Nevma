@@ -18,8 +18,12 @@ public sealed class CalendarEventConfiguration : IEntityTypeConfiguration<Calend
         builder.Property(calendarEvent => calendarEvent.EndsAt).IsRequired();
         builder.Property(calendarEvent => calendarEvent.Location).HasMaxLength(500);
         builder.Property(calendarEvent => calendarEvent.ParticipantIds).HasColumnType("uuid[]").IsRequired();
+        builder.Property(calendarEvent => calendarEvent.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(calendarEvent => calendarEvent.UpdatedAt).IsRequired();
+        builder.Property(calendarEvent => calendarEvent.CancelledAt);
+        builder.Property<uint>("xmin").IsRowVersion();
         builder.HasIndex(calendarEvent => calendarEvent.InvitationId).IsUnique();
-        builder.HasIndex(calendarEvent => calendarEvent.StartsAt);
+        builder.HasIndex(calendarEvent => new { calendarEvent.Status, calendarEvent.StartsAt, calendarEvent.EndsAt });
         builder.HasIndex(calendarEvent => calendarEvent.ParticipantIds).HasMethod("gin");
         builder
             .HasOne<MeetingInvitation>()

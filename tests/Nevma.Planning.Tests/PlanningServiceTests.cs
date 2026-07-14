@@ -130,6 +130,137 @@ public sealed class PlanningServiceTests
         Assert.IsType<InvitationActionResult.Forbidden>(result);
     }
 
+    [Fact]
+    public async Task Overlapping_meeting_for_a_shared_participant_is_rejected()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var sharedParticipant = Guid.NewGuid();
+        var first = await service.CreateInvitationAsync(
+            Guid.NewGuid(),
+            CreateRequest(sharedParticipant));
+        await service.AcceptInvitationAsync(first.Invitation!.Id, sharedParticipant);
+        var overlapping = await service.CreateInvitationAsync(
+            Guid.NewGuid(),
+            CreateRequest(sharedParticipant, Now.AddDays(1).AddMinutes(30)));
+
+        var result = await service.AcceptInvitationAsync(
+            overlapping.Invitation!.Id,
+            sharedParticipant);
+
+        Assert.IsType<AcceptInvitationResult.CalendarConflict>(result);
+        Assert.Equal(1, await context.CalendarEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Adjacent_meetings_do_not_conflict()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var sharedParticipant = Guid.NewGuid();
+        var first = await service.CreateInvitationAsync(
+            Guid.NewGuid(),
+            CreateRequest(sharedParticipant));
+        await service.AcceptInvitationAsync(first.Invitation!.Id, sharedParticipant);
+        var adjacent = await service.CreateInvitationAsync(
+            Guid.NewGuid(),
+            CreateRequest(sharedParticipant, Now.AddDays(1).AddHours(1)));
+
+        var result = await service.AcceptInvitationAsync(adjacent.Invitation!.Id, sharedParticipant);
+
+        Assert.IsType<AcceptInvitationResult.Accepted>(result);
+        Assert.Equal(2, await context.CalendarEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Accepted_reschedule_updates_the_existing_calendar_event()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var organizerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var created = await service.CreateInvitationAsync(organizerId, CreateRequest(inviteeId));
+        await service.AcceptInvitationAsync(created.Invitation!.Id, inviteeId);
+        var newStart = Now.AddDays(3);
+
+        var proposed = await service.ProposeRescheduleAsync(
+            created.Invitation.Id,
+            organizerId,
+            new RescheduleMeetingRequest(newStart, TimeSpan.FromHours(2), "Thessaloniki"));
+        var accepted = await service.AcceptInvitationAsync(created.Invitation.Id, inviteeId);
+
+        var proposal = Assert.IsType<InvitationActionResult.Updated>(proposed);
+        Assert.Equal(MeetingInvitationStatus.RescheduleProposed, proposal.Invitation.Status);
+        var response = Assert.IsType<AcceptInvitationResult.Accepted>(accepted);
+        Assert.Equal(newStart, response.Event.StartsAt);
+        Assert.Equal("Thessaloniki", response.Event.Location);
+        Assert.Equal(1, await context.CalendarEvents.CountAsync());
+    }
+
+    [Fact]
+    public async Task Cancelling_an_accepted_meeting_removes_it_from_the_active_calendar()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var organizerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var created = await service.CreateInvitationAsync(organizerId, CreateRequest(inviteeId));
+        await service.AcceptInvitationAsync(created.Invitation!.Id, inviteeId);
+
+        var cancelled = await service.CancelInvitationAsync(created.Invitation.Id, organizerId);
+        var calendar = await service.GetCalendarAsync(
+            inviteeId,
+            Now,
+            Now.AddDays(30));
+
+        var response = Assert.IsType<InvitationActionResult.Updated>(cancelled);
+        Assert.Equal(MeetingInvitationStatus.Cancelled, response.Invitation.Status);
+        Assert.Empty(calendar);
+        var storedEvent = await context.CalendarEvents.SingleAsync();
+        Assert.Equal(Nevma.Planning.Api.Domain.Calendar.CalendarEventStatus.Cancelled, storedEvent.Status);
+        Assert.NotNull(storedEvent.CancelledAt);
+    }
+
+    [Fact]
+    public async Task Invitee_cannot_cancel_the_organizers_meeting()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var organizerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var created = await service.CreateInvitationAsync(organizerId, CreateRequest(inviteeId));
+        await service.AcceptInvitationAsync(created.Invitation!.Id, inviteeId);
+
+        var result = await service.CancelInvitationAsync(created.Invitation.Id, inviteeId);
+
+        Assert.IsType<InvitationActionResult.Forbidden>(result);
+        Assert.Equal(
+            Nevma.Planning.Api.Domain.Calendar.CalendarEventStatus.Confirmed,
+            (await context.CalendarEvents.SingleAsync()).Status);
+    }
+
+    [Fact]
+    public async Task Declined_reschedule_keeps_the_original_calendar_event()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var organizerId = Guid.NewGuid();
+        var inviteeId = Guid.NewGuid();
+        var originalStart = Now.AddDays(1);
+        var created = await service.CreateInvitationAsync(organizerId, CreateRequest(inviteeId, originalStart));
+        await service.AcceptInvitationAsync(created.Invitation!.Id, inviteeId);
+        await service.ProposeRescheduleAsync(
+            created.Invitation.Id,
+            organizerId,
+            new RescheduleMeetingRequest(Now.AddDays(5), TimeSpan.FromHours(1), null));
+
+        var result = await service.DeclineInvitationAsync(created.Invitation.Id, inviteeId);
+
+        var declined = Assert.IsType<InvitationActionResult.Updated>(result);
+        Assert.Equal(MeetingInvitationStatus.Accepted, declined.Invitation.Status);
+        Assert.Equal(originalStart, (await context.CalendarEvents.SingleAsync()).StartsAt);
+    }
+
     private static PlanningService CreateService(PlanningDbContext context) =>
         new(new EfPlanningRepository(context), context, new FixedTimeProvider(Now));
 
@@ -142,11 +273,13 @@ public sealed class PlanningServiceTests
         return new PlanningDbContext(options);
     }
 
-    private static CreateMeetingInvitationRequest CreateRequest(Guid inviteeId) =>
+    private static CreateMeetingInvitationRequest CreateRequest(
+        Guid inviteeId,
+        DateTimeOffset? startsAt = null) =>
         new(
             inviteeId,
             "Coffee",
-            Now.AddDays(1),
+            startsAt ?? Now.AddDays(1),
             TimeSpan.FromHours(1),
             "Athens",
             null);

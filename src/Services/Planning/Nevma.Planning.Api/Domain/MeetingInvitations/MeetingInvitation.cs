@@ -6,6 +6,7 @@ public enum InvitationStatus
     Accepted,
     Declined,
     CounterProposed,
+    RescheduleProposed,
     Cancelled
 }
 
@@ -47,6 +48,10 @@ public sealed class MeetingInvitation
     public DateTimeOffset? ProposedStartsAt { get; private set; }
     public TimeSpan? ProposedDuration { get; private set; }
     public string? ProposedLocation { get; private set; }
+    public DateTimeOffset AcceptanceStartsAt =>
+        ProposedStartsAt ?? StartsAt;
+    public TimeSpan AcceptanceDuration =>
+        ProposedDuration ?? Duration;
 
     public static MeetingInvitation Create(
         Guid organizerId,
@@ -70,14 +75,11 @@ public sealed class MeetingInvitation
 
     public AcceptOutcome Accept(Guid userId, DateTimeOffset respondedAt)
     {
-        if (Status is not (InvitationStatus.Pending or InvitationStatus.CounterProposed))
-            return AcceptOutcome.AlreadyHandled;
+        var eligibility = CanAccept(userId);
+        if (eligibility != AcceptOutcome.Accepted)
+            return eligibility;
 
-        var expectedResponderId = Status == InvitationStatus.Pending ? InviteeId : OrganizerId;
-        if (expectedResponderId != userId)
-            return AcceptOutcome.Forbidden;
-
-        if (Status == InvitationStatus.CounterProposed)
+        if (Status is InvitationStatus.CounterProposed or InvitationStatus.RescheduleProposed)
         {
             StartsAt = ProposedStartsAt!.Value;
             Duration = ProposedDuration!.Value;
@@ -92,8 +94,33 @@ public sealed class MeetingInvitation
         return AcceptOutcome.Accepted;
     }
 
+    public AcceptOutcome CanAccept(Guid userId)
+    {
+        if (Status is not (
+            InvitationStatus.Pending or
+            InvitationStatus.CounterProposed or
+            InvitationStatus.RescheduleProposed))
+            return AcceptOutcome.AlreadyHandled;
+
+        var expectedResponderId = Status == InvitationStatus.CounterProposed ? OrganizerId : InviteeId;
+        if (expectedResponderId != userId)
+            return AcceptOutcome.Forbidden;
+        return AcceptOutcome.Accepted;
+    }
+
     public InvitationDecision Decline(Guid userId, DateTimeOffset respondedAt)
     {
+        if (Status == InvitationStatus.RescheduleProposed)
+        {
+            if (InviteeId != userId)
+                return InvitationDecision.Forbidden;
+
+            ClearProposal();
+            Status = InvitationStatus.Accepted;
+            RespondedAt = respondedAt;
+            return InvitationDecision.Success;
+        }
+
         if (Status is not (InvitationStatus.Pending or InvitationStatus.CounterProposed))
             return InvitationDecision.AlreadyHandled;
 
@@ -124,6 +151,46 @@ public sealed class MeetingInvitation
         Status = InvitationStatus.CounterProposed;
         RespondedAt = respondedAt;
         return InvitationDecision.Success;
+    }
+
+    public InvitationDecision ProposeReschedule(
+        Guid userId,
+        DateTimeOffset startsAt,
+        TimeSpan duration,
+        string? location,
+        DateTimeOffset respondedAt)
+    {
+        if (Status != InvitationStatus.Accepted)
+            return InvitationDecision.AlreadyHandled;
+        if (OrganizerId != userId)
+            return InvitationDecision.Forbidden;
+
+        ProposedStartsAt = startsAt;
+        ProposedDuration = duration;
+        ProposedLocation = location?.Trim();
+        Status = InvitationStatus.RescheduleProposed;
+        RespondedAt = respondedAt;
+        return InvitationDecision.Success;
+    }
+
+    public InvitationDecision Cancel(Guid userId, DateTimeOffset respondedAt)
+    {
+        if (Status is InvitationStatus.Cancelled or InvitationStatus.Declined)
+            return InvitationDecision.AlreadyHandled;
+        if (OrganizerId != userId)
+            return InvitationDecision.Forbidden;
+
+        ClearProposal();
+        Status = InvitationStatus.Cancelled;
+        RespondedAt = respondedAt;
+        return InvitationDecision.Success;
+    }
+
+    private void ClearProposal()
+    {
+        ProposedStartsAt = null;
+        ProposedDuration = null;
+        ProposedLocation = null;
     }
 }
 

@@ -6,6 +6,7 @@ public enum MeetingInvitationStatus
     Accepted,
     Declined,
     CounterProposed,
+    RescheduleProposed,
     Cancelled
 }
 
@@ -18,6 +19,11 @@ public sealed record CreateMeetingInvitationRequest(
     string? Message);
 
 public sealed record CounterProposeMeetingInvitationRequest(
+    DateTimeOffset StartsAt,
+    TimeSpan Duration,
+    string? Location);
+
+public sealed record RescheduleMeetingRequest(
     DateTimeOffset StartsAt,
     TimeSpan Duration,
     string? Location);
@@ -45,4 +51,13 @@ public sealed record CalendarEventResponse(
     DateTimeOffset StartsAt,
     DateTimeOffset EndsAt,
     string? Location,
-    IReadOnlyCollection<Guid> ParticipantIds);
+    IReadOnlyCollection<Guid> ParticipantIds,
+    CalendarEventStatus Status,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? CancelledAt);
+
+public enum CalendarEventStatus
+{
+    Confirmed,
+    Cancelled
+}

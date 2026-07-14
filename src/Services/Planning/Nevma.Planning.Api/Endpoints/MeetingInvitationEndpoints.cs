@@ -61,6 +61,8 @@ public static class MeetingInvitationEndpoints
                 AcceptInvitationResult.Forbidden => Results.Forbid(),
                 AcceptInvitationResult.AlreadyHandled => Results.Conflict(
                     new { message = "Invitation has already been handled." }),
+                AcceptInvitationResult.CalendarConflict => Results.Conflict(
+                    new { message = "The proposed time conflicts with an existing calendar event." }),
                 _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
             };
         });
@@ -92,6 +94,35 @@ public static class MeetingInvitationEndpoints
                 actorId,
                 request,
                 cancellationToken));
+        });
+
+        invitations.MapPost("/{id:guid}/reschedule", async (
+            Guid id,
+            RescheduleMeetingRequest request,
+            ClaimsPrincipal principal,
+            PlanningService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+
+            return ToResult(await service.ProposeRescheduleAsync(
+                id,
+                actorId,
+                request,
+                cancellationToken));
+        });
+
+        invitations.MapPost("/{id:guid}/cancel", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            PlanningService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var actorId))
+                return Results.Unauthorized();
+
+            return ToResult(await service.CancelInvitationAsync(id, actorId, cancellationToken));
         });
 
         return endpoints;
