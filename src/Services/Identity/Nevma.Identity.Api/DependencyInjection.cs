@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Nevma.Identity.Api.Application.Authentication;
+using Nevma.Identity.Api.Application;
+using Nevma.Identity.Api.Application.Connections;
 using Nevma.Identity.Api.Application.Users;
 using Nevma.Identity.Api.Infrastructure.Authentication;
+using Nevma.Identity.Api.Infrastructure.Connections;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 using Nevma.Identity.Api.Infrastructure.Users;
 
@@ -24,6 +27,9 @@ public static class DependencyInjection
                     npgsqlOptions.EnableRetryOnFailure();
                 }));
         services.AddNevmaAuthentication(configuration, environment);
+        services.AddScoped<IIdentityUnitOfWork>(provider => provider.GetRequiredService<IdentityDbContext>());
+        services.AddScoped<IContactConnectionRepository, EfContactConnectionRepository>();
+        services.AddScoped<ContactConnectionService>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<UserService>();
         services.AddScoped<IRegistrationService, RegistrationService>();

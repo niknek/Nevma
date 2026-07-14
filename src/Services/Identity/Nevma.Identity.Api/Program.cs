@@ -23,6 +23,7 @@ app.UseAntiforgery();
 app.MapHealthChecks("/health");
 app.MapAccountEndpoints();
 app.MapAuthenticationEndpoints();
+app.MapContactConnectionEndpoints();
 app.MapOpenIddictEndpoints();
 app.MapUserEndpoints();
 

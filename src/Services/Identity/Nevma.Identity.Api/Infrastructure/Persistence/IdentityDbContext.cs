@@ -2,14 +2,17 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Nevma.Identity.Api.Domain.Users;
+using Nevma.Identity.Api.Domain.Connections;
+using Nevma.Identity.Api.Application;
 using OpenIddict.EntityFrameworkCore;
 
 namespace Nevma.Identity.Api.Infrastructure.Persistence;
 
 public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> options)
-    : IdentityDbContext<IdentityAccount, IdentityRole<Guid>, Guid>(options)
+    : IdentityDbContext<IdentityAccount, IdentityRole<Guid>, Guid>(options), IIdentityUnitOfWork
 {
     public DbSet<User> Profiles => Set<User>();
+    public DbSet<ContactConnection> ContactConnections => Set<ContactConnection>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
