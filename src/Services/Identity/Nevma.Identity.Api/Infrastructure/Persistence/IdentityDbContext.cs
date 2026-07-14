@@ -13,6 +13,9 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
 {
     public DbSet<User> Profiles => Set<User>();
     public DbSet<ContactConnection> ContactConnections => Set<ContactConnection>();
+    public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+    public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
+    public DbSet<UserReport> UserReports => Set<UserReport>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

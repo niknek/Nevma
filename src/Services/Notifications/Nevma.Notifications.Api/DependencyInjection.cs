@@ -35,12 +35,14 @@ public static class DependencyInjection
         services.AddScoped<INotificationsUnitOfWork>(provider =>
             provider.GetRequiredService<NotificationsDbContext>());
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
+        services.AddScoped<INotificationPreferenceRepository, EfNotificationPreferenceRepository>();
         services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
         services.AddScoped<IDeliveryAttemptRepository, EfDeliveryAttemptRepository>();
         services.AddScoped<DeliveryAttemptStore>();
         services.AddScoped<IPushDeviceRepository, EfPushDeviceRepository>();
         services.AddSingleton<IPushTokenProtector, DataProtectionPushTokenProtector>();
         services.AddScoped<NotificationService>();
+        services.AddScoped<NotificationPreferenceService>();
         services.AddScoped<PushDeviceService>();
         services.AddScoped<PlanningEventHandler>();
 

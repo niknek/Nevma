@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Nevma.Contracts.Identity;
 using Nevma.Identity.Api.Application.Authentication;
 using Nevma.Identity.Api.Infrastructure.Authentication;
+using OpenIddict.Abstractions;
 
 namespace Nevma.Identity.Api.Endpoints;
 
@@ -20,6 +22,23 @@ public static class AuthenticationEndpoints
         })
         .AllowAnonymous()
         .RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy)
+        .WithTags("Authentication");
+
+        endpoints.MapPost("/api/auth/logout-all", async (
+            ClaimsPrincipal principal,
+            IOpenIddictTokenManager tokenManager,
+            IOpenIddictAuthorizationManager authorizationManager,
+            CancellationToken cancellationToken) =>
+        {
+            var subject = principal.FindFirstValue(OpenIddictConstants.Claims.Subject);
+            if (string.IsNullOrWhiteSpace(subject))
+                return Results.Unauthorized();
+
+            await tokenManager.RevokeBySubjectAsync(subject, cancellationToken);
+            await authorizationManager.RevokeBySubjectAsync(subject, cancellationToken);
+            return Results.NoContent();
+        })
+        .RequireAuthorization()
         .WithTags("Authentication");
 
         return endpoints;

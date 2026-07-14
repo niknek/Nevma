@@ -9,7 +9,6 @@ public sealed class EfUserRepository(IdentityDbContext dbContext) : IUserReposit
 {
     public Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         dbContext.Profiles
-            .AsNoTracking()
             .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
 
     public async Task AddAsync(User user, CancellationToken cancellationToken = default) =>

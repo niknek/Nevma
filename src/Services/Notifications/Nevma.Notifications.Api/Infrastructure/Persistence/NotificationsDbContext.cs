@@ -16,6 +16,7 @@ public sealed class NotificationsDbContext(DbContextOptions<NotificationsDbConte
     public DbSet<PushDevice> PushDevices => Set<PushDevice>();
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
     public DbSet<DeliveryAttempt> DeliveryAttempts => Set<DeliveryAttempt>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

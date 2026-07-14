@@ -21,6 +21,23 @@ public sealed record NotificationResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset? ReadAt);
 
+public sealed record NotificationPreferenceResponse(
+    bool PushEnabled,
+    bool MeetingNotificationsEnabled,
+    bool TaskRemindersEnabled,
+    TimeOnly? QuietHoursStart,
+    TimeOnly? QuietHoursEnd,
+    string TimeZoneId,
+    DateTimeOffset UpdatedAt);
+
+public sealed record UpdateNotificationPreferenceRequest(
+    bool PushEnabled,
+    bool MeetingNotificationsEnabled,
+    bool TaskRemindersEnabled,
+    TimeOnly? QuietHoursStart,
+    TimeOnly? QuietHoursEnd,
+    string TimeZoneId);
+
 public enum PushPlatform
 {
     Android,

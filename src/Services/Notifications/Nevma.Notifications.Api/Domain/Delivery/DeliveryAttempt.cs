@@ -62,6 +62,12 @@ public sealed class DeliveryAttempt
         ClearLock();
     }
 
+    public void Defer(DateTimeOffset nextAttemptAt)
+    {
+        NextAttemptAt = nextAttemptAt;
+        ClearLock();
+    }
+
     private void ClearLock()
     {
         LockId = null;

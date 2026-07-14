@@ -1,5 +1,7 @@
 using Nevma.Notifications.Api.Application.Delivery;
 using Nevma.Notifications.Api.Application.PushDevices;
+using Nevma.Notifications.Api.Application.Notifications;
+using Nevma.Notifications.Api.Domain.Notifications;
 
 namespace Nevma.Notifications.Api.Infrastructure.Delivery;
 
@@ -38,6 +40,7 @@ public sealed class PushDeliveryDispatcher(
         await using var scope = scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DeliveryAttemptStore>();
         var tokenProtector = scope.ServiceProvider.GetRequiredService<IPushTokenProtector>();
+        var preferenceRepository = scope.ServiceProvider.GetRequiredService<INotificationPreferenceRepository>();
         var workItems = await store.ClaimBatchAsync(
             timeProvider.GetUtcNow(),
             batchSize: 20,
@@ -48,7 +51,20 @@ public sealed class PushDeliveryDispatcher(
             var now = timeProvider.GetUtcNow();
             try
             {
-                if (!workItem.Device.IsActive)
+                var preference = await preferenceRepository.GetAsync(
+                    workItem.Notification.UserId,
+                    cancellationToken);
+                var deliveryPreference = preference?.Evaluate(workItem.Notification.Type, now)
+                    ?? DeliveryPreference.Allowed;
+                if (deliveryPreference is DeliveryPreference.Disable)
+                {
+                    workItem.Attempt.MarkPermanentFailure("PreferenceDisabled", now);
+                }
+                else if (deliveryPreference is DeliveryPreference.Deferred deferred)
+                {
+                    workItem.Attempt.Defer(deferred.Until);
+                }
+                else if (!workItem.Device.IsActive)
                 {
                     workItem.Attempt.MarkPermanentFailure("DeviceRevoked", now);
                 }

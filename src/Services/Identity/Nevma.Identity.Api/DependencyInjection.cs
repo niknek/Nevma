@@ -31,7 +31,9 @@ public static class DependencyInjection
         services.AddScoped<IContactConnectionRepository, EfContactConnectionRepository>();
         services.AddScoped<ContactConnectionService>();
         services.AddScoped<IUserRepository, EfUserRepository>();
+        services.AddScoped<IUserPrivacyRepository, EfUserPrivacyRepository>();
         services.AddScoped<UserService>();
+        services.AddScoped<UserPrivacyService>();
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddHostedService<OpenIddictSeeder>();
         return services;
