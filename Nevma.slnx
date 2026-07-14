@@ -8,6 +8,9 @@
     <Project Path="src/Gateway/Nevma.Gateway/Nevma.Gateway.csproj" />
   </Folder>
   <Folder Name="/src/Services/" />
+  <Folder Name="/src/Services/Files/">
+    <Project Path="src/Services/Files/Nevma.Files.Api/Nevma.Files.Api.csproj" />
+  </Folder>
   <Folder Name="/src/Services/Identity/">
     <Project Path="src/Services/Identity/Nevma.Identity.Api/Nevma.Identity.Api.csproj" />
   </Folder>
@@ -27,5 +30,6 @@
     <Project Path="tests/Nevma.Notifications.Tests/Nevma.Notifications.Tests.csproj" />
     <Project Path="tests/Nevma.Planning.Tests/Nevma.Planning.Tests.csproj" />
     <Project Path="tests/Nevma.ServiceDefaults.Tests/Nevma.ServiceDefaults.Tests.csproj" />
+    <Project Path="tests/Nevma.Files.Tests/Nevma.Files.Tests.csproj" />
   </Folder>
 </Solution>
