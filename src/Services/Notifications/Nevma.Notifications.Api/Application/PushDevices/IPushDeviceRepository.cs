@@ -10,4 +10,7 @@ public interface IPushDeviceRepository
         Guid userId,
         string deviceId,
         CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PushDevice>> ListActiveAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

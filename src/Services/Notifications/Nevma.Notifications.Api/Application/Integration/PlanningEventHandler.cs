@@ -1,12 +1,17 @@
 using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Notifications.Api.Application.Notifications;
+using Nevma.Notifications.Api.Application.Delivery;
+using Nevma.Notifications.Api.Application.PushDevices;
+using Nevma.Notifications.Api.Domain.Delivery;
 using Nevma.Notifications.Api.Domain.Notifications;
 
 namespace Nevma.Notifications.Api.Application.Integration;
 
 public sealed class PlanningEventHandler(
     INotificationRepository notificationRepository,
+    IPushDeviceRepository pushDeviceRepository,
+    IDeliveryAttemptRepository deliveryAttemptRepository,
     IIntegrationEventInbox inbox,
     INotificationsUnitOfWork unitOfWork,
     TimeProvider timeProvider)
@@ -28,14 +33,22 @@ public sealed class PlanningEventHandler(
                      integrationEvent.InviteeId
                  }.Distinct())
         {
+            var notification = Notification.Create(
+                userId,
+                "meeting-invitation.changed",
+                title,
+                "Open Nevma to review this update.",
+                now);
             await notificationRepository.AddAsync(
-                Notification.Create(
-                    userId,
-                    "meeting-invitation.changed",
-                    title,
-                    "Open Nevma to review this update.",
-                    now),
+                notification,
                 cancellationToken);
+            var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
+            foreach (var device in devices)
+            {
+                await deliveryAttemptRepository.AddAsync(
+                    DeliveryAttempt.Create(notification.Id, device.Id, now),
+                    cancellationToken);
+            }
         }
 
         inbox.Add(

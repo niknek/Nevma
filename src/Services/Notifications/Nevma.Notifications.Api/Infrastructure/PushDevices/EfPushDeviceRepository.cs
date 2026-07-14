@@ -25,4 +25,11 @@ public sealed class EfPushDeviceRepository(NotificationsDbContext dbContext) : I
         dbContext.PushDevices.SingleOrDefaultAsync(
             device => device.UserId == userId && device.DeviceId == deviceId,
             cancellationToken);
+
+    public async Task<IReadOnlyList<PushDevice>> ListActiveAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.PushDevices
+            .Where(device => device.UserId == userId && device.IsActive)
+            .ToListAsync(cancellationToken);
 }

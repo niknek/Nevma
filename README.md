@@ -79,6 +79,19 @@ dotnet ef database update --project src/Services/Notifications/Nevma.Notificatio
 Production deployments must persist the Data Protection key ring in a shared protected store;
 losing or changing that key ring makes existing protected push tokens unreadable.
 
+FCM delivery is disabled by default. Enable it only after configuring Application Default
+Credentials with the minimum Firebase Cloud Messaging role and setting the target project:
+
+```powershell
+$env:GOOGLE_APPLICATION_CREDENTIALS="C:\secure\nevma-fcm-service-account.json"
+$env:PushDelivery__Enabled="true"
+$env:PushDelivery__ProjectId="<firebase-project-id>"
+```
+
+The credential file must stay outside the repository. Delivery attempts are persisted before
+sending, retry transient failures with bounded backoff, and revoke devices after permanent
+provider errors such as an unregistered target.
+
 Redis SignalR scale-out remains a later infrastructure slice; PostgreSQL is the source of truth
 for conversations and messages.
 

@@ -3,8 +3,11 @@ using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Notifications.Api.Application.Integration;
 using Nevma.Notifications.Api.Infrastructure.Inbox;
+using Nevma.Notifications.Api.Infrastructure.Delivery;
 using Nevma.Notifications.Api.Infrastructure.Notifications;
 using Nevma.Notifications.Api.Infrastructure.Persistence;
+using Nevma.Notifications.Api.Infrastructure.PushDevices;
+using Nevma.Notifications.Api.Domain.PushDevices;
 
 namespace Nevma.Notifications.Tests;
 
@@ -18,6 +21,22 @@ public sealed class PlanningEventHandlerTests
         await using var context = CreateContext();
         var handler = CreateHandler(context);
         var integrationEvent = CreateEvent();
+        context.PushDevices.AddRange(
+            PushDevice.Register(
+                integrationEvent.OrganizerId,
+                "organizer-phone",
+                PushPlatform.Android,
+                "protected-1",
+                "hash-1",
+                Now),
+            PushDevice.Register(
+                integrationEvent.InviteeId,
+                "invitee-phone",
+                PushPlatform.Ios,
+                "protected-2",
+                "hash-2",
+                Now));
+        await context.SaveChangesAsync();
 
         var result = await handler.HandleAsync(integrationEvent);
 
@@ -32,6 +51,7 @@ public sealed class PlanningEventHandlerTests
             Assert.DoesNotContain(integrationEvent.Location!, notification.Body, StringComparison.OrdinalIgnoreCase);
         });
         Assert.Equal(1, await context.InboxMessages.CountAsync());
+        Assert.Equal(2, await context.DeliveryAttempts.CountAsync());
     }
 
     [Fact]
@@ -66,6 +86,8 @@ public sealed class PlanningEventHandlerTests
     private static PlanningEventHandler CreateHandler(NotificationsDbContext context) =>
         new(
             new EfNotificationRepository(context),
+            new EfPushDeviceRepository(context),
+            new EfDeliveryAttemptRepository(context),
             new EfIntegrationEventInbox(context),
             context,
             new FixedTimeProvider(Now));

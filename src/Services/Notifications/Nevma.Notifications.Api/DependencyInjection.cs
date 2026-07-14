@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using Nevma.Notifications.Api.Application;
 using Nevma.Notifications.Api.Application.Notifications;
 using Nevma.Notifications.Api.Application.Integration;
+using Nevma.Notifications.Api.Application.Delivery;
 using Nevma.Notifications.Api.Application.PushDevices;
 using Nevma.Notifications.Api.Infrastructure.Authentication;
 using Nevma.Notifications.Api.Infrastructure.Notifications;
 using Nevma.Notifications.Api.Infrastructure.Inbox;
+using Nevma.Notifications.Api.Infrastructure.Delivery;
 using Nevma.Notifications.Api.Infrastructure.Messaging;
 using Nevma.Notifications.Api.Infrastructure.Persistence;
 using Nevma.Notifications.Api.Infrastructure.PushDevices;
@@ -34,6 +36,8 @@ public static class DependencyInjection
             provider.GetRequiredService<NotificationsDbContext>());
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
         services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
+        services.AddScoped<IDeliveryAttemptRepository, EfDeliveryAttemptRepository>();
+        services.AddScoped<DeliveryAttemptStore>();
         services.AddScoped<IPushDeviceRepository, EfPushDeviceRepository>();
         services.AddSingleton<IPushTokenProtector, DataProtectionPushTokenProtector>();
         services.AddScoped<NotificationService>();
@@ -47,6 +51,17 @@ public static class DependencyInjection
             configuration.GetSection(MessageBrokerOptions.SectionName));
         if (brokerOptions.Enabled)
             services.AddHostedService<PlanningEventsConsumer>();
+
+        var pushOptions = configuration
+            .GetSection(PushDeliveryOptions.SectionName)
+            .Get<PushDeliveryOptions>() ?? new PushDeliveryOptions();
+        services.Configure<PushDeliveryOptions>(
+            configuration.GetSection(PushDeliveryOptions.SectionName));
+        if (pushOptions.Enabled)
+        {
+            services.AddSingleton<IPushNotificationSender, FirebasePushNotificationSender>();
+            services.AddHostedService<PushDeliveryDispatcher>();
+        }
         return services;
     }
 }
