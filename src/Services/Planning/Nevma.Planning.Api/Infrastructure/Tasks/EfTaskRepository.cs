@@ -13,12 +13,14 @@ public sealed class EfTaskRepository(PlanningDbContext dbContext) : ITaskReposit
     public async Task AddAsync(TaskItem task, CancellationToken cancellationToken = default) =>
         await dbContext.Tasks.AddAsync(task, cancellationToken);
 
+    public void Remove(TaskItem task) => dbContext.Tasks.Remove(task);
+
     public Task<TaskItem?> GetAsync(
         Guid id,
         Guid ownerId,
         CancellationToken cancellationToken = default) =>
         dbContext.Tasks.SingleOrDefaultAsync(
-            task => task.Id == id && task.OwnerId == ownerId,
+            task => task.Id == id && task.OwnerId == ownerId && task.DeletedAt == null,
             cancellationToken);
 
     public async Task<IReadOnlyList<TaskItem>> ListAsync(
@@ -27,7 +29,8 @@ public sealed class EfTaskRepository(PlanningDbContext dbContext) : ITaskReposit
         DateTimeOffset dayStart,
         CancellationToken cancellationToken = default)
     {
-        var query = dbContext.Tasks.AsNoTracking().Where(task => task.OwnerId == ownerId);
+        var query = dbContext.Tasks.AsNoTracking().Where(task =>
+            task.OwnerId == ownerId && task.DeletedAt == null);
         query = filter switch
         {
             TaskFilter.Urgent => query.Where(task =>
@@ -47,4 +50,19 @@ public sealed class EfTaskRepository(PlanningDbContext dbContext) : ITaskReposit
             .ThenBy(task => task.DueAt)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyList<TaskItem>> ListDueRemindersAsync(
+        DateTimeOffset now,
+        int batchSize,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.Tasks
+            .Where(task =>
+                task.DeletedAt == null &&
+                task.Status == DomainStatus.Active &&
+                task.ReminderAt != null &&
+                task.ReminderAt <= now &&
+                task.ReminderDispatchedAt == null)
+            .OrderBy(task => task.ReminderAt)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
 }

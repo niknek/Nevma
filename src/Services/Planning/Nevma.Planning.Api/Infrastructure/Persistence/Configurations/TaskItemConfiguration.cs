@@ -18,11 +18,17 @@ public sealed class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
         builder.Property(task => task.Priority).HasConversion<string>().HasMaxLength(20);
         builder.Property(task => task.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(task => task.ReminderAt);
+        builder.Property(task => task.Recurrence).HasConversion<string>().HasMaxLength(20);
+        builder.Property(task => task.RecurrenceInterval).IsRequired();
+        builder.Property(task => task.RecurrenceEndsAt);
         builder.Property(task => task.CreatedAt).IsRequired();
         builder.Property(task => task.CompletedAt);
+        builder.Property(task => task.UpdatedAt);
+        builder.Property(task => task.ReminderDispatchedAt);
+        builder.Property(task => task.DeletedAt);
         builder.Property<uint>("xmin").IsRowVersion();
         builder.HasIndex(task => new { task.OwnerId, task.Status, task.DueAt });
         builder.HasIndex(task => new { task.OwnerId, task.Priority, task.Status });
-        builder.HasIndex(task => new { task.Status, task.ReminderAt });
+        builder.HasIndex(task => new { task.Status, task.ReminderAt, task.ReminderDispatchedAt });
     }
 }

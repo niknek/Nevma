@@ -113,6 +113,11 @@ public sealed class PlanningEventsConsumer(
             _options.Exchange,
             PlanningIntegrationEventTypes.MeetingInvitationChanged,
             cancellationToken: cancellationToken);
+        await channel.QueueBindAsync(
+            _options.Queue,
+            _options.Exchange,
+            PlanningIntegrationEventTypes.TaskReminderDue,
+            cancellationToken: cancellationToken);
         await channel.BasicQosAsync(0, 10, false, cancellationToken);
     }
 
@@ -123,22 +128,21 @@ public sealed class PlanningEventsConsumer(
     {
         try
         {
-            if (delivery.BasicProperties.Type != PlanningIntegrationEventTypes.MeetingInvitationChanged)
-                throw new InvalidDataException("Unsupported integration event type.");
-            var integrationEvent = JsonSerializer.Deserialize<MeetingInvitationChangedIntegrationEvent>(
-                delivery.Body.ToArray(),
-                SerializerOptions) ?? throw new InvalidDataException("Integration event payload is empty.");
-            if (!string.Equals(
-                delivery.BasicProperties.MessageId,
-                integrationEvent.EventId.ToString("N"),
-                StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException("Integration event identifier does not match its envelope.");
-            }
-
             await using var scope = scopeFactory.CreateAsyncScope();
             var handler = scope.ServiceProvider.GetRequiredService<PlanningEventHandler>();
-            await handler.HandleAsync(integrationEvent, cancellationToken);
+            var eventId = delivery.BasicProperties.Type switch
+            {
+                PlanningIntegrationEventTypes.MeetingInvitationChanged =>
+                    await HandleMeetingAsync(handler, delivery.Body.ToArray(), cancellationToken),
+                PlanningIntegrationEventTypes.TaskReminderDue =>
+                    await HandleTaskReminderAsync(handler, delivery.Body.ToArray(), cancellationToken),
+                _ => throw new InvalidDataException("Unsupported integration event type.")
+            };
+            if (!string.Equals(
+                delivery.BasicProperties.MessageId,
+                eventId.ToString("N"),
+                StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("Integration event identifier does not match its envelope.");
             await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
         }
         catch (Exception exception) when (exception is JsonException or InvalidDataException)
@@ -161,5 +165,29 @@ public sealed class PlanningEventsConsumer(
                 delivery.BasicProperties.MessageId);
             await channel.BasicNackAsync(delivery.DeliveryTag, false, true, cancellationToken);
         }
+    }
+
+    private static async Task<Guid> HandleMeetingAsync(
+        PlanningEventHandler handler,
+        byte[] body,
+        CancellationToken cancellationToken)
+    {
+        var integrationEvent = JsonSerializer.Deserialize<MeetingInvitationChangedIntegrationEvent>(
+            body,
+            SerializerOptions) ?? throw new InvalidDataException("Integration event payload is empty.");
+        await handler.HandleAsync(integrationEvent, cancellationToken);
+        return integrationEvent.EventId;
+    }
+
+    private static async Task<Guid> HandleTaskReminderAsync(
+        PlanningEventHandler handler,
+        byte[] body,
+        CancellationToken cancellationToken)
+    {
+        var integrationEvent = JsonSerializer.Deserialize<TaskReminderDueIntegrationEvent>(
+            body,
+            SerializerOptions) ?? throw new InvalidDataException("Integration event payload is empty.");
+        await handler.HandleAsync(integrationEvent, cancellationToken);
+        return integrationEvent.EventId;
     }
 }

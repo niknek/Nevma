@@ -33,6 +33,8 @@ public static class DependencyInjection
         services.AddScoped<PlanningService>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
         services.AddScoped<TaskService>();
+        services.AddScoped<TaskReminderProcessor>();
+        services.AddHostedService<TaskReminderWorker>();
 
         var brokerOptions = configuration
             .GetSection(MessageBrokerOptions.SectionName)

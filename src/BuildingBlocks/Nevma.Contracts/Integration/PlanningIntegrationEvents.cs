@@ -18,7 +18,16 @@ public sealed record MeetingInvitationChangedIntegrationEvent(
     Guid? CalendarEventId,
     DateTimeOffset OccurredAt);
 
+public sealed record TaskReminderDueIntegrationEvent(
+    Guid EventId,
+    Guid TaskId,
+    Guid OwnerId,
+    string Title,
+    DateTimeOffset? DueAt,
+    DateTimeOffset OccurredAt);
+
 public static class PlanningIntegrationEventTypes
 {
     public const string MeetingInvitationChanged = "planning.meeting-invitation.changed.v1";
+    public const string TaskReminderDue = "planning.task-reminder.due.v1";
 }

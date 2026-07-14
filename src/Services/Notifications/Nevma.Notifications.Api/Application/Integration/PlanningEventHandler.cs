@@ -77,6 +77,45 @@ public sealed class PlanningEventHandler(
             MeetingInvitationStatus.Cancelled => "Meeting cancelled",
             _ => "Meeting update"
         };
+
+    public async Task<PlanningEventHandleResult> HandleAsync(
+        TaskReminderDueIntegrationEvent integrationEvent,
+        CancellationToken cancellationToken = default)
+    {
+        if (await inbox.ExistsAsync(integrationEvent.EventId, cancellationToken))
+            return PlanningEventHandleResult.AlreadyProcessed;
+        if (integrationEvent.OwnerId == Guid.Empty || integrationEvent.TaskId == Guid.Empty)
+            throw new InvalidDataException("Task reminder identifiers are required.");
+
+        var now = timeProvider.GetUtcNow();
+        var notification = Notification.Create(
+            integrationEvent.OwnerId,
+            "task.reminder",
+            "Task reminder",
+            "Open Nevma to review what is due.",
+            now);
+        await notificationRepository.AddAsync(notification, cancellationToken);
+        var devices = await pushDeviceRepository.ListActiveAsync(
+            integrationEvent.OwnerId,
+            cancellationToken);
+        foreach (var device in devices)
+        {
+            await deliveryAttemptRepository.AddAsync(
+                DeliveryAttempt.Create(notification.Id, device.Id, now),
+                cancellationToken);
+        }
+
+        inbox.Add(integrationEvent.EventId, PlanningIntegrationEventTypes.TaskReminderDue, now);
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (DuplicateNotificationEventException)
+        {
+            return PlanningEventHandleResult.AlreadyProcessed;
+        }
+        return PlanningEventHandleResult.Processed;
+    }
 }
 
 public enum PlanningEventHandleResult

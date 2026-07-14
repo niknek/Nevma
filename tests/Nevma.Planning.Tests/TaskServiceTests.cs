@@ -101,6 +101,56 @@ public sealed class TaskServiceTests
         Assert.Empty(context.Tasks);
     }
 
+    [Fact]
+    public async Task Owner_can_update_and_delete_an_active_task()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var ownerId = Guid.NewGuid();
+        var created = await service.CreateAsync(ownerId, CreateRequest("Old title"));
+
+        var updated = await service.UpdateAsync(
+            created.Task!.Id,
+            ownerId,
+            new UpdateTaskRequest(
+                "New title",
+                "Changed",
+                Now.AddDays(1),
+                TaskPriority.High,
+                Now.AddHours(1)));
+        var deleted = await service.DeleteAsync(created.Task.Id, ownerId);
+        var visible = await service.ListAsync(ownerId, TaskFilter.All, DayStart);
+
+        Assert.Equal("New title", Assert.IsType<ChangeTaskResult.Updated>(updated).Task.Title);
+        Assert.Equal(DeleteTaskResult.Deleted, deleted);
+        Assert.Empty(visible);
+    }
+
+    [Fact]
+    public async Task Completing_a_recurring_task_creates_the_next_occurrence()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var ownerId = Guid.NewGuid();
+        var dueAt = Now.AddDays(1);
+        var created = await service.CreateAsync(
+            ownerId,
+            new CreateTaskRequest(
+                "Daily check",
+                null,
+                dueAt,
+                TaskPriority.Normal,
+                Now.AddHours(12),
+                TaskRecurrence.Daily));
+
+        var result = Assert.IsType<CompleteTaskResult.Completed>(
+            await service.CompleteAsync(created.Task!.Id, ownerId));
+
+        Assert.NotNull(result.NextOccurrence);
+        Assert.Equal(dueAt.AddDays(1), result.NextOccurrence.DueAt);
+        Assert.Equal(2, await context.Tasks.CountAsync());
+    }
+
     private static TaskService CreateService(PlanningDbContext context) =>
         new(new EfTaskRepository(context), context, new FixedTimeProvider(Now));
 

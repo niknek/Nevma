@@ -65,6 +65,44 @@ public static class TaskEndpoints
             };
         });
 
+        tasks.MapPut("/{id:guid}", async (
+            Guid id,
+            UpdateTaskRequest request,
+            ClaimsPrincipal principal,
+            TaskService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var ownerId))
+                return Results.Unauthorized();
+
+            return await service.UpdateAsync(id, ownerId, request, cancellationToken) switch
+            {
+                ChangeTaskResult.Updated updated => Results.Ok(updated.Task),
+                ChangeTaskResult.NotFound => Results.NotFound(),
+                ChangeTaskResult.Conflict conflict => Results.Conflict(new { message = conflict.Message }),
+                ChangeTaskResult.ValidationFailed invalid => Results.ValidationProblem(invalid.Errors),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        });
+
+        tasks.MapDelete("/{id:guid}", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            TaskService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var ownerId))
+                return Results.Unauthorized();
+
+            return await service.DeleteAsync(id, ownerId, cancellationToken) switch
+            {
+                DeleteTaskResult.Deleted => Results.NoContent(),
+                DeleteTaskResult.NotFound => Results.NotFound(),
+                DeleteTaskResult.Conflict => Results.Conflict(new { message = "Task changed during deletion." }),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        });
+
         return endpoints;
     }
 
