@@ -14,6 +14,9 @@
   <Folder Name="/src/Services/Messaging/">
     <Project Path="src/Services/Messaging/Nevma.Messaging.Api/Nevma.Messaging.Api.csproj" />
   </Folder>
+  <Folder Name="/src/Services/Notifications/">
+    <Project Path="src/Services/Notifications/Nevma.Notifications.Api/Nevma.Notifications.Api.csproj" />
+  </Folder>
   <Folder Name="/src/Services/Planning/">
     <Project Path="src/Services/Planning/Nevma.Planning.Api/Nevma.Planning.Api.csproj" />
   </Folder>
@@ -21,6 +24,7 @@
     <Project Path="tests/Nevma.ArchitectureTests/Nevma.ArchitectureTests.csproj" />
     <Project Path="tests/Nevma.Identity.Tests/Nevma.Identity.Tests.csproj" />
     <Project Path="tests/Nevma.Messaging.Tests/Nevma.Messaging.Tests.csproj" />
+    <Project Path="tests/Nevma.Notifications.Tests/Nevma.Notifications.Tests.csproj" />
     <Project Path="tests/Nevma.Planning.Tests/Nevma.Planning.Tests.csproj" />
     <Project Path="tests/Nevma.ServiceDefaults.Tests/Nevma.ServiceDefaults.Tests.csproj" />
   </Folder>

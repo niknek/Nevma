@@ -8,6 +8,7 @@ Voice-first planning and collaboration platform.
 - `Nevma.Identity.Api`: users, devices, sessions, contacts, and permissions.
 - `Nevma.Planning.Api`: calendar, meeting invitations, tasks, and reminders.
 - `Nevma.Messaging.Api`: conversations and SignalR realtime messaging.
+- `Nevma.Notifications.Api`: notification inbox, protected push devices, and delivery workers.
 - `Nevma.Contracts`: versioned integration contracts shared between services.
 - `Nevma.ServiceDefaults`: shared HTTP error handling, correlation IDs, security headers,
   health checks, and reusable result primitives. It contains no business rules.
@@ -28,6 +29,7 @@ Run the APIs in separate terminals:
 dotnet run --project src/Services/Identity/Nevma.Identity.Api
 dotnet run --project src/Services/Planning/Nevma.Planning.Api
 dotnet run --project src/Services/Messaging/Nevma.Messaging.Api
+dotnet run --project src/Services/Notifications/Nevma.Notifications.Api
 dotnet run --project src/Gateway/Nevma.Gateway
 ```
 
@@ -64,6 +66,18 @@ $env:ConnectionStrings__MessagingDatabase="Host=localhost;Port=5432;Database=nev
 $env:Authentication__Issuer="https://identity.example.com/"
 dotnet ef database update --project src/Services/Messaging/Nevma.Messaging.Api
 ```
+
+Notifications owns another isolated PostgreSQL schema. Push tokens are protected with ASP.NET
+Core Data Protection and are never returned by the API:
+
+```powershell
+$env:ConnectionStrings__NotificationsDatabase="Host=localhost;Port=5432;Database=nevma_notifications;Username=nevma_notifications;Password=<secret>"
+$env:Authentication__Issuer="https://identity.example.com/"
+dotnet ef database update --project src/Services/Notifications/Nevma.Notifications.Api
+```
+
+Production deployments must persist the Data Protection key ring in a shared protected store;
+losing or changing that key ring makes existing protected push tokens unreadable.
 
 Redis SignalR scale-out remains a later infrastructure slice; PostgreSQL is the source of truth
 for conversations and messages.
