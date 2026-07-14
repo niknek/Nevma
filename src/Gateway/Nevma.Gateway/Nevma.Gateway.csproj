@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\BuildingBlocks\Nevma.Contracts\Nevma.Contracts.csproj" />
+    <ProjectReference Include="..\..\BuildingBlocks\Nevma.ServiceDefaults\Nevma.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>

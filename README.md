@@ -9,6 +9,8 @@ Voice-first planning and collaboration platform.
 - `Nevma.Planning.Api`: calendar, meeting invitations, tasks, and reminders.
 - `Nevma.Messaging.Api`: conversations and SignalR realtime messaging.
 - `Nevma.Contracts`: versioned integration contracts shared between services.
+- `Nevma.ServiceDefaults`: shared HTTP error handling, correlation IDs, security headers,
+  health checks, and reusable result primitives. It contains no business rules.
 
 ## Local development
 

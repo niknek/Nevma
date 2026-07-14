@@ -2,6 +2,7 @@
   <Folder Name="/src/" />
   <Folder Name="/src/BuildingBlocks/">
     <Project Path="src/BuildingBlocks/Nevma.Contracts/Nevma.Contracts.csproj" />
+    <Project Path="src/BuildingBlocks/Nevma.ServiceDefaults/Nevma.ServiceDefaults.csproj" />
   </Folder>
   <Folder Name="/src/Gateway/">
     <Project Path="src/Gateway/Nevma.Gateway/Nevma.Gateway.csproj" />
@@ -18,5 +19,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nevma.ArchitectureTests/Nevma.ArchitectureTests.csproj" />
+    <Project Path="tests/Nevma.ServiceDefaults.Tests/Nevma.ServiceDefaults.Tests.csproj" />
   </Folder>
 </Solution>
