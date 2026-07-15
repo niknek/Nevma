@@ -75,7 +75,10 @@ public sealed class SolutionStructureTests
             .Descendants("ProjectReference")
             .Select(reference => reference.Attribute("Include")?.Value)
             .Where(include => !string.IsNullOrWhiteSpace(include))
-            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include!)))
+            .Select(include => include!
+                .Replace('\\', Path.DirectorySeparatorChar)
+                .Replace('/', Path.DirectorySeparatorChar))
+            .Select(include => Path.GetFullPath(Path.Combine(projectDirectory, include)))
             .ToArray();
     }
 
