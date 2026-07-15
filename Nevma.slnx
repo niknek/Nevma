@@ -28,6 +28,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Nevma.ArchitectureTests/Nevma.ArchitectureTests.csproj" />
+    <Project Path="tests/Nevma.EndToEndTests/Nevma.EndToEndTests.csproj" />
     <Project Path="tests/Nevma.Identity.Tests/Nevma.Identity.Tests.csproj" />
     <Project Path="tests/Nevma.Messaging.Tests/Nevma.Messaging.Tests.csproj" />
     <Project Path="tests/Nevma.Notifications.Tests/Nevma.Notifications.Tests.csproj" />

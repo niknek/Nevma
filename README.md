@@ -40,6 +40,17 @@ and password are stored in the local `.env` file. Stop the APIs, or the APIs and
 Docker ports bind to `127.0.0.1` only. Redis is provisioned with authentication and persistence
 for the later SignalR scale-out slice; PostgreSQL remains the current source of truth.
 
+Run the live first-milestone test against the started backend with:
+
+```powershell
+$env:NEVMA_RUN_E2E="true"
+dotnet test tests/Nevma.EndToEndTests
+```
+
+It exercises registration, OAuth authorization code with PKCE, contacts, meeting acceptance,
+calendar persistence, RabbitMQ notifications, and conversation integration. The test is skipped
+in the normal unit-test run when `NEVMA_RUN_E2E` is not enabled.
+
 ```powershell
 dotnet restore Nevma.slnx
 dotnet build Nevma.slnx
