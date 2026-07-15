@@ -9,3 +9,4 @@ public sealed record FileAssetResponse(
     DateTimeOffset CreatedAt);
 
 public sealed record GrantFileAccessRequest(Guid UserId);
+public sealed record FileDownloadUrlResponse(Uri Url, DateTimeOffset ExpiresAt);

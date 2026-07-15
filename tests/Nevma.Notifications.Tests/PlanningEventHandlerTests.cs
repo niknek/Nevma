@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
 using Nevma.Notifications.Api.Application.Integration;
@@ -19,7 +20,8 @@ public sealed class PlanningEventHandlerTests
     public async Task Meeting_event_creates_one_privacy_safe_notification_per_participant()
     {
         await using var context = CreateContext();
-        var handler = CreateHandler(context);
+        var livePublisher = new RecordingLivePublisher();
+        var handler = CreateHandler(context, livePublisher);
         var integrationEvent = CreateEvent();
         context.PushDevices.AddRange(
             PushDevice.Register(
@@ -52,6 +54,7 @@ public sealed class PlanningEventHandlerTests
         });
         Assert.Equal(1, await context.InboxMessages.CountAsync());
         Assert.Equal(2, await context.DeliveryAttempts.CountAsync());
+        Assert.Equal(2, livePublisher.Notifications.Count);
     }
 
     [Fact]
@@ -83,14 +86,18 @@ public sealed class PlanningEventHandlerTests
         Assert.Empty(context.InboxMessages);
     }
 
-    private static PlanningEventHandler CreateHandler(NotificationsDbContext context) =>
+    private static PlanningEventHandler CreateHandler(
+        NotificationsDbContext context,
+        Nevma.Notifications.Api.Application.Notifications.ILiveNotificationPublisher? livePublisher = null) =>
         new(
             new EfNotificationRepository(context),
             new EfPushDeviceRepository(context),
             new EfDeliveryAttemptRepository(context),
             new EfIntegrationEventInbox(context),
             context,
-            new FixedTimeProvider(Now));
+            new FixedTimeProvider(Now),
+            livePublisher ?? new NoOpLivePublisher(),
+            NullLogger<PlanningEventHandler>.Instance);
 
     private static NotificationsDbContext CreateContext()
     {
@@ -120,5 +127,28 @@ public sealed class PlanningEventHandlerTests
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class NoOpLivePublisher
+        : Nevma.Notifications.Api.Application.Notifications.ILiveNotificationPublisher
+    {
+        public Task PublishAsync(
+            Guid userId,
+            Nevma.Contracts.Notifications.NotificationResponse notification,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingLivePublisher
+        : Nevma.Notifications.Api.Application.Notifications.ILiveNotificationPublisher
+    {
+        public List<Nevma.Contracts.Notifications.NotificationResponse> Notifications { get; } = [];
+        public Task PublishAsync(
+            Guid userId,
+            Nevma.Contracts.Notifications.NotificationResponse notification,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add(notification);
+            return Task.CompletedTask;
+        }
     }
 }

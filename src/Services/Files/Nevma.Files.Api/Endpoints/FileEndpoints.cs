@@ -29,6 +29,9 @@ public static class FileEndpoints
                 FileUploadResult.Invalid invalid => Results.ValidationProblem(
                     new Dictionary<string, string[]> { [invalid.Field] = [invalid.Message] }),
                 FileUploadResult.Rejected rejected => Results.BadRequest(new { message = rejected.Message }),
+                FileUploadResult.ScanUnavailable => Results.Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "File security scanning is unavailable."),
                 _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
             };
         }).DisableAntiforgery();
@@ -41,6 +44,25 @@ public static class FileEndpoints
             if (!TryGetUserId(principal, out var userId))
                 return Results.Unauthorized();
             return Results.Ok(await service.ListAsync(userId, cancellationToken));
+        });
+
+        files.MapPost("/{id:guid}/download-url", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            FileAssetService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+                return Results.Unauthorized();
+            return await service.CreateDownloadUrlAsync(id, userId, cancellationToken) switch
+            {
+                FileUrlResult.Created created => Results.Ok(created.Download),
+                FileUrlResult.NotFound => Results.NotFound(),
+                FileUrlResult.NotSupported => Results.Problem(
+                    statusCode: StatusCodes.Status501NotImplemented,
+                    title: "Temporary download URLs are unavailable for the configured storage provider."),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
         });
 
         files.MapGet("/{id:guid}", async (

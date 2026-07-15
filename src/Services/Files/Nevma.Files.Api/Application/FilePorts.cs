@@ -19,6 +19,12 @@ public interface IFileStorage
     Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default);
     Task<Stream> OpenReadAsync(string storageKey, CancellationToken cancellationToken = default);
     Task DeleteAsync(string storageKey, CancellationToken cancellationToken = default);
+    Task<Uri?> CreateReadUrlAsync(
+        string storageKey,
+        string fileName,
+        string contentType,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IFileScanner
@@ -26,9 +32,10 @@ public interface IFileScanner
     Task<FileScanResult> ScanAsync(Stream content, CancellationToken cancellationToken = default);
 }
 
-public sealed record FileScanResult(bool IsSafe, string? ThreatName)
+public sealed record FileScanResult(bool IsSafe, string? ThreatName, bool IsAvailable = true)
 {
     public static FileScanResult Safe { get; } = new(true, null);
+    public static FileScanResult Unavailable { get; } = new(false, null, false);
 }
 
 public sealed record FileUpload(string FileName, string ContentType, long Length, Stream Content);

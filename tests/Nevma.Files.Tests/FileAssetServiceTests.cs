@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Nevma.Files.Api.Application;
 using Nevma.Files.Api.Infrastructure.Persistence;
 
@@ -59,8 +61,53 @@ public sealed class FileAssetServiceTests
         Assert.IsType<FileDownloadResult.Found>(await service.OpenAsync(uploaded.File.Id, readerId));
     }
 
-    private static FileAssetService CreateService(FilesDbContext context, MemoryStorage storage) =>
-        new(new EfFileAssetRepository(context), storage, new AlwaysSafeScanner(), context, TimeProvider.System);
+    [Fact]
+    public async Task Upload_fails_closed_when_the_scanner_is_unavailable()
+    {
+        await using var context = CreateContext();
+        var storage = new MemoryStorage();
+        var bytes = "%PDF-1.7\ncontent"u8.ToArray();
+        var service = CreateService(context, storage, new UnavailableScanner());
+
+        var result = await service.UploadAsync(
+            Guid.NewGuid(),
+            new FileUpload("report.pdf", "application/pdf", bytes.Length, new MemoryStream(bytes)));
+
+        Assert.IsType<FileUploadResult.ScanUnavailable>(result);
+        Assert.Empty(storage.Files);
+    }
+
+    [Fact]
+    public async Task Authorized_user_can_receive_a_short_lived_storage_url()
+    {
+        await using var context = CreateContext();
+        var storage = new MemoryStorage { ReadUrl = new Uri("https://storage.example.test/file?signature=test") };
+        var service = CreateService(context, storage);
+        var ownerId = Guid.NewGuid();
+        var bytes = "%PDF-1.7\ncontent"u8.ToArray();
+        var uploaded = Assert.IsType<FileUploadResult.Uploaded>(await service.UploadAsync(
+            ownerId,
+            new FileUpload("report.pdf", "application/pdf", bytes.Length, new MemoryStream(bytes))));
+
+        var result = Assert.IsType<FileUrlResult.Created>(
+            await service.CreateDownloadUrlAsync(uploaded.File.Id, ownerId));
+
+        Assert.Equal(storage.ReadUrl, result.Download.Url);
+        Assert.InRange(result.Download.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(4), DateTimeOffset.UtcNow.AddMinutes(6));
+    }
+
+    private static FileAssetService CreateService(
+        FilesDbContext context,
+        MemoryStorage storage,
+        IFileScanner? scanner = null) =>
+        new(
+            new EfFileAssetRepository(context),
+            storage,
+            scanner ?? new AlwaysSafeScanner(),
+            context,
+            TimeProvider.System,
+            Options.Create(new FileDeliveryOptions()),
+            NullLogger<FileAssetService>.Instance);
 
     private static FilesDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<FilesDbContext>()
@@ -71,10 +118,16 @@ public sealed class FileAssetServiceTests
         public Task<FileScanResult> ScanAsync(Stream content, CancellationToken cancellationToken = default) =>
             Task.FromResult(FileScanResult.Safe);
     }
+    private sealed class UnavailableScanner : IFileScanner
+    {
+        public Task<FileScanResult> ScanAsync(Stream content, CancellationToken cancellationToken = default) =>
+            Task.FromResult(FileScanResult.Unavailable);
+    }
 
     private sealed class MemoryStorage : IFileStorage
     {
         public Dictionary<string, byte[]> Files { get; } = [];
+        public Uri? ReadUrl { get; init; }
         public async Task SaveAsync(string storageKey, Stream content, CancellationToken cancellationToken = default)
         {
             using var buffer = new MemoryStream();
@@ -88,5 +141,12 @@ public sealed class FileAssetServiceTests
             Files.Remove(storageKey);
             return Task.CompletedTask;
         }
+        public Task<Uri?> CreateReadUrlAsync(
+            string storageKey,
+            string fileName,
+            string contentType,
+            DateTimeOffset expiresAt,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ReadUrl);
     }
 }

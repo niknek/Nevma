@@ -1,7 +1,7 @@
 using Nevma.Contracts.Integration;
 using Nevma.Contracts.Planning;
-using Nevma.Notifications.Api.Application.Notifications;
 using Nevma.Notifications.Api.Application.Delivery;
+using Nevma.Notifications.Api.Application.Notifications;
 using Nevma.Notifications.Api.Application.PushDevices;
 using Nevma.Notifications.Api.Domain.Delivery;
 using Nevma.Notifications.Api.Domain.Notifications;
@@ -14,7 +14,9 @@ public sealed class PlanningEventHandler(
     IDeliveryAttemptRepository deliveryAttemptRepository,
     IIntegrationEventInbox inbox,
     INotificationsUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    ILiveNotificationPublisher livePublisher,
+    ILogger<PlanningEventHandler> logger)
 {
     public async Task<PlanningEventHandleResult> HandleAsync(
         MeetingInvitationChangedIntegrationEvent integrationEvent,
@@ -27,11 +29,8 @@ public sealed class PlanningEventHandler(
 
         var now = timeProvider.GetUtcNow();
         var title = GetPrivacySafeTitle(integrationEvent.Status);
-        foreach (var userId in new[]
-                 {
-                     integrationEvent.OrganizerId,
-                     integrationEvent.InviteeId
-                 }.Distinct())
+        var created = new List<Notification>();
+        foreach (var userId in new[] { integrationEvent.OrganizerId, integrationEvent.InviteeId }.Distinct())
         {
             var notification = Notification.Create(
                 userId,
@@ -39,9 +38,8 @@ public sealed class PlanningEventHandler(
                 title,
                 "Open Nevma to review this update.",
                 now);
-            await notificationRepository.AddAsync(
-                notification,
-                cancellationToken);
+            await notificationRepository.AddAsync(notification, cancellationToken);
+            created.Add(notification);
             var devices = await pushDeviceRepository.ListActiveAsync(userId, cancellationToken);
             foreach (var device in devices)
             {
@@ -63,20 +61,11 @@ public sealed class PlanningEventHandler(
         {
             return PlanningEventHandleResult.AlreadyProcessed;
         }
+
+        foreach (var notification in created)
+            await PublishBestEffortAsync(notification, cancellationToken);
         return PlanningEventHandleResult.Processed;
     }
-
-    private static string GetPrivacySafeTitle(MeetingInvitationStatus status) =>
-        status switch
-        {
-            MeetingInvitationStatus.Pending => "New meeting request",
-            MeetingInvitationStatus.Accepted => "Meeting updated",
-            MeetingInvitationStatus.Declined => "Meeting response",
-            MeetingInvitationStatus.CounterProposed => "Meeting change proposed",
-            MeetingInvitationStatus.RescheduleProposed => "Meeting change proposed",
-            MeetingInvitationStatus.Cancelled => "Meeting cancelled",
-            _ => "Meeting update"
-        };
 
     public async Task<PlanningEventHandleResult> HandleAsync(
         TaskReminderDueIntegrationEvent integrationEvent,
@@ -95,9 +84,7 @@ public sealed class PlanningEventHandler(
             "Open Nevma to review what is due.",
             now);
         await notificationRepository.AddAsync(notification, cancellationToken);
-        var devices = await pushDeviceRepository.ListActiveAsync(
-            integrationEvent.OwnerId,
-            cancellationToken);
+        var devices = await pushDeviceRepository.ListActiveAsync(integrationEvent.OwnerId, cancellationToken);
         foreach (var device in devices)
         {
             await deliveryAttemptRepository.AddAsync(
@@ -114,8 +101,45 @@ public sealed class PlanningEventHandler(
         {
             return PlanningEventHandleResult.AlreadyProcessed;
         }
+
+        await PublishBestEffortAsync(notification, cancellationToken);
         return PlanningEventHandleResult.Processed;
     }
+
+    private async Task PublishBestEffortAsync(Notification notification, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await livePublisher.PublishAsync(
+                notification.UserId,
+                new(
+                    notification.Id,
+                    notification.Type,
+                    notification.Title,
+                    notification.Body,
+                    notification.CreatedAt,
+                    notification.ReadAt),
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "Live publication failed for notification {NotificationId}; durable delivery remains queued.",
+                notification.Id);
+        }
+    }
+
+    private static string GetPrivacySafeTitle(MeetingInvitationStatus status) => status switch
+    {
+        MeetingInvitationStatus.Pending => "New meeting request",
+        MeetingInvitationStatus.Accepted => "Meeting updated",
+        MeetingInvitationStatus.Declined => "Meeting response",
+        MeetingInvitationStatus.CounterProposed => "Meeting change proposed",
+        MeetingInvitationStatus.RescheduleProposed => "Meeting change proposed",
+        MeetingInvitationStatus.Cancelled => "Meeting cancelled",
+        _ => "Meeting update"
+    };
 }
 
 public enum PlanningEventHandleResult

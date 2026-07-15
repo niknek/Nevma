@@ -157,10 +157,27 @@ dotnet ef database update --project src/Services/Files/Nevma.Files.Api
 dotnet ef database update --project src/Services/Commands/Nevma.Commands.Api
 ```
 
-The default file adapter stores content under the service's private `App_Data/files` directory;
-production should configure `FileStorage__RootPath` to an encrypted private volume or replace
-`IFileStorage` with private object storage. Uploads are capped at 25 MB and validated by extension,
-MIME type, file signature, SHA-256, authorization, and the configured scanner adapter.
+The default file adapter stores content under the service's private `App_Data/files` directory.
+Production can select the built-in S3-compatible adapter (AWS S3, MinIO, or another compatible
+private store) and ClamAV streaming scanner without code changes. Uploads are capped at 25 MB and
+validated by extension, MIME type, file signature, SHA-256, authorization, and malware scan. The
+scanner fails closed when ClamAV is unavailable. S3 downloads can use authorization-checked signed
+URLs that expire after at most 15 minutes; local storage continues to stream through the API.
+
+```powershell
+$env:FileStorage__Provider="S3"
+$env:FileStorage__BucketName="nevma-private-files"
+$env:FileStorage__Region="eu-central-1"
+$env:FileStorage__ServiceUrl="https://s3.example.com" # optional for AWS
+$env:FileStorage__AccessKey="<secret>"
+$env:FileStorage__SecretKey="<secret>"
+$env:MalwareScanning__Provider="ClamAV"
+$env:MalwareScanning__Host="clamav"
+```
+
+Notification events are persisted before delivery. They are published immediately to authenticated
+clients on `/hubs/notifications`, with Redis scale-out when enabled, while privacy-safe Firebase push
+attempts remain durable and retryable in PostgreSQL.
 
 Commands never execute directly from raw voice text. `/api/commands/preview` creates a durable
 structured plan, `/confirm` executes it with the authenticated user's token, and `/undo` reverses

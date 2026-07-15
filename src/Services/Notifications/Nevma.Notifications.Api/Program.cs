@@ -1,5 +1,6 @@
 using Nevma.Notifications.Api;
 using Nevma.Notifications.Api.Endpoints;
+using Nevma.Notifications.Api.Realtime;
 using Nevma.ServiceDefaults.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -19,5 +20,6 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapNotificationEndpoints();
 app.MapPushDeviceEndpoints();
+app.MapHub<NotificationHub>("/hubs/notifications").RequireAuthorization();
 
 app.Run();

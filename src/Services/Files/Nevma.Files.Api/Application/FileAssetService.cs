@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Options;
 using Nevma.Contracts.Files;
 using Nevma.Files.Api.Domain;
 
@@ -9,7 +10,9 @@ public sealed class FileAssetService(
     IFileStorage storage,
     IFileScanner scanner,
     IFilesUnitOfWork unitOfWork,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IOptions<FileDeliveryOptions> deliveryOptions,
+    ILogger<FileAssetService> logger)
 {
     public const long MaxFileSize = 25 * 1024 * 1024;
 
@@ -34,8 +37,16 @@ public sealed class FileAssetService(
 
         buffer.Position = 0;
         var scan = await scanner.ScanAsync(buffer, cancellationToken);
+        if (!scan.IsAvailable)
+            return new FileUploadResult.ScanUnavailable();
         if (!scan.IsSafe)
+        {
+            logger.LogWarning(
+                "File upload for user {OwnerId} was rejected by the malware scanner as {ThreatName}.",
+                ownerId,
+                scan.ThreatName ?? "unknown");
             return new FileUploadResult.Rejected("File failed the security scan.");
+        }
 
         var hash = Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))).ToLowerInvariant();
         var storageKey = $"{ownerId:N}/{Guid.NewGuid():N}";
@@ -59,6 +70,12 @@ public sealed class FileAssetService(
             await storage.DeleteAsync(storageKey, cancellationToken);
             throw;
         }
+        logger.LogInformation(
+            "File asset {FileId} was uploaded by {OwnerId} with content type {ContentType} and size {Size}.",
+            asset.Id,
+            ownerId,
+            asset.ContentType,
+            asset.Size);
         return new FileUploadResult.Uploaded(ToResponse(asset));
     }
 
@@ -77,7 +94,29 @@ public sealed class FileAssetService(
         if (asset is null || !asset.CanRead(userId))
             return new FileDownloadResult.NotFound();
         var stream = await storage.OpenReadAsync(asset.StorageKey, cancellationToken);
+        logger.LogInformation("File asset {FileId} was downloaded by {UserId}.", asset.Id, userId);
         return new FileDownloadResult.Found(stream, asset.FileName, asset.ContentType);
+    }
+
+    public async Task<FileUrlResult> CreateDownloadUrlAsync(
+        Guid id,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var asset = await repository.GetAsync(id, cancellationToken);
+        if (asset is null || !asset.CanRead(userId))
+            return new FileUrlResult.NotFound();
+        var lifetime = TimeSpan.FromMinutes(Math.Clamp(deliveryOptions.Value.SignedUrlLifetimeMinutes, 1, 15));
+        var expiresAt = timeProvider.GetUtcNow().Add(lifetime);
+        var url = await storage.CreateReadUrlAsync(
+            asset.StorageKey,
+            asset.FileName,
+            asset.ContentType,
+            expiresAt,
+            cancellationToken);
+        if (url is null) return new FileUrlResult.NotSupported();
+        logger.LogInformation("A temporary download URL was issued for file asset {FileId} to {UserId}.", asset.Id, userId);
+        return new FileUrlResult.Created(new FileDownloadUrlResponse(url, expiresAt));
     }
 
     public async Task<bool> GrantAsync(Guid id, Guid ownerId, Guid userId, CancellationToken cancellationToken = default)
@@ -86,6 +125,7 @@ public sealed class FileAssetService(
         if (asset is null || !asset.Grant(ownerId, userId, timeProvider.GetUtcNow()))
             return false;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("File asset {FileId} access was granted by {OwnerId} to {UserId}.", id, ownerId, userId);
         return true;
     }
 
@@ -95,6 +135,7 @@ public sealed class FileAssetService(
         if (asset is null || !asset.Revoke(ownerId, userId))
             return false;
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("File asset {FileId} access was revoked by {OwnerId} from {UserId}.", id, ownerId, userId);
         return true;
     }
 
@@ -105,6 +146,7 @@ public sealed class FileAssetService(
             return false;
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await storage.DeleteAsync(asset.StorageKey, cancellationToken);
+        logger.LogInformation("File asset {FileId} was deleted by {OwnerId}.", id, ownerId);
         return true;
     }
 
@@ -117,6 +159,19 @@ public abstract record FileUploadResult
     public sealed record Uploaded(FileAssetResponse File) : FileUploadResult;
     public sealed record Invalid(string Field, string Message) : FileUploadResult;
     public sealed record Rejected(string Message) : FileUploadResult;
+    public sealed record ScanUnavailable : FileUploadResult;
+}
+
+public abstract record FileUrlResult
+{
+    public sealed record Created(FileDownloadUrlResponse Download) : FileUrlResult;
+    public sealed record NotFound : FileUrlResult;
+    public sealed record NotSupported : FileUrlResult;
+}
+
+public sealed class FileDeliveryOptions
+{
+    public int SignedUrlLifetimeMinutes { get; init; } = 5;
 }
 
 public abstract record FileDownloadResult

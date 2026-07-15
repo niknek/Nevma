@@ -97,6 +97,21 @@ public sealed class CoreWorkflowTests
         var undone = await ReadAsync<CommandResponse>(undoResponse);
         Assert.Equal(CommandStatus.Undone, undone.Status);
 
+        var liveNotification = new TaskCompletionSource<NotificationResponse>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var notificationHub = new HubConnectionBuilder()
+            .WithUrl(new Uri(NotificationsUri, "/hubs/notifications"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult<string?>(inviteeToken);
+            })
+            .Build();
+        notificationHub.On<NotificationResponse>("notification.received", notification =>
+        {
+            if (notification.Type == "meeting-invitation.changed")
+                liveNotification.TrySetResult(notification);
+        });
+        await notificationHub.StartAsync();
+
         var title = $"E2E coffee {suffix[..8]}";
         var startsAt = DateTimeOffset.UtcNow.AddHours(2);
         var invitationResponse = await organizerPlanning.PostAsJsonAsync(
@@ -110,6 +125,8 @@ public sealed class CoreWorkflowTests
                 "Created by the live backend test"));
         Assert.Equal(HttpStatusCode.Created, invitationResponse.StatusCode);
         var invitation = await ReadAsync<MeetingInvitationResponse>(invitationResponse);
+        var realtimeNotification = await liveNotification.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Equal("New meeting request", realtimeNotification.Title);
 
         var acceptInvitation = await inviteePlanning.PostAsync(
             $"/api/meeting-invitations/{invitation.Id}/accept",

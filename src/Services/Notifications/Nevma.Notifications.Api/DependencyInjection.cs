@@ -12,6 +12,8 @@ using Nevma.Notifications.Api.Infrastructure.Delivery;
 using Nevma.Notifications.Api.Infrastructure.Messaging;
 using Nevma.Notifications.Api.Infrastructure.Persistence;
 using Nevma.Notifications.Api.Infrastructure.PushDevices;
+using Nevma.Notifications.Api.Infrastructure.Realtime;
+using StackExchange.Redis;
 
 namespace Nevma.Notifications.Api;
 
@@ -32,6 +34,20 @@ public static class DependencyInjection
                     npgsqlOptions.EnableRetryOnFailure();
                 }));
         services.AddNotificationsAuthentication(configuration);
+        var signalR = services.AddSignalR(options => options.MaximumReceiveMessageSize = 16 * 1024);
+        var realtimeOptions = configuration
+            .GetSection(NotificationRealtimeOptions.SectionName)
+            .Get<NotificationRealtimeOptions>() ?? new NotificationRealtimeOptions();
+        if (realtimeOptions.Enabled)
+        {
+            if (string.IsNullOrWhiteSpace(realtimeOptions.ConnectionString))
+                throw new InvalidOperationException("Redis:ConnectionString is required when Redis is enabled.");
+            signalR.AddStackExchangeRedis(realtimeOptions.ConnectionString, options =>
+            {
+                options.Configuration.AbortOnConnectFail = false;
+                options.Configuration.ChannelPrefix = RedisChannel.Literal("nevma:notifications");
+            });
+        }
         services.AddScoped<INotificationsUnitOfWork>(provider =>
             provider.GetRequiredService<NotificationsDbContext>());
         services.AddScoped<INotificationRepository, EfNotificationRepository>();
@@ -43,6 +59,7 @@ public static class DependencyInjection
         services.AddSingleton<IPushTokenProtector, DataProtectionPushTokenProtector>();
         services.AddScoped<NotificationService>();
         services.AddScoped<NotificationPreferenceService>();
+        services.AddScoped<ILiveNotificationPublisher, SignalRLiveNotificationPublisher>();
         services.AddScoped<PushDeviceService>();
         services.AddScoped<PlanningEventHandler>();
 

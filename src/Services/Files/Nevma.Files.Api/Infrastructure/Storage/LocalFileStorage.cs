@@ -39,6 +39,14 @@ public sealed class LocalFileStorage
         return Task.CompletedTask;
     }
 
+    public Task<Uri?> CreateReadUrlAsync(
+        string storageKey,
+        string fileName,
+        string contentType,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<Uri?>(null);
+
     private string Resolve(string storageKey)
     {
         var relative = storageKey.Replace('/', Path.DirectorySeparatorChar);
