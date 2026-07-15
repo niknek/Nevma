@@ -12,6 +12,7 @@ using Nevma.Messaging.Api.Infrastructure.Messaging;
 using Nevma.Messaging.Api.Infrastructure.Realtime;
 using Nevma.Messaging.Api.Application.Presence;
 using StackExchange.Redis;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Messaging.Api;
 
@@ -69,8 +70,10 @@ public static class DependencyInjection
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
         services.AddScoped<PlanningEventHandler>();
-        services.AddHttpClient("Files", client =>
-            client.BaseAddress = new Uri(configuration["Services:Files"] ?? "http://localhost:5106"));
+        services
+            .AddHttpClient("Files", client =>
+                client.BaseAddress = new Uri(configuration["Services:Files"] ?? "http://localhost:5106"))
+            .AddNevmaResilience();
 
         var brokerOptions = configuration
             .GetSection(MessageBrokerOptions.SectionName)

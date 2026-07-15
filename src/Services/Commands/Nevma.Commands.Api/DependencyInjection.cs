@@ -6,6 +6,7 @@ using Nevma.Commands.Api.Infrastructure.Execution;
 using Nevma.Commands.Api.Infrastructure.Parsing;
 using Nevma.Commands.Api.Infrastructure.Persistence;
 using Nevma.Commands.Api.Infrastructure.Speech;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Commands.Api;
 
@@ -24,15 +25,23 @@ public static class DependencyInjection
         services.Configure<SpeechProviderOptions>(configuration.GetSection(SpeechProviderOptions.SectionName));
         services.AddSingleton<RuleBasedIntentParser>();
         services.AddSingleton<ICommandValidator, CommandValidator>();
-        services.AddHttpClient<HttpAiProvider>(client => client.Timeout = TimeSpan.FromSeconds(20));
-        services.AddHttpClient<HttpSpeechToTextProvider>(client => client.Timeout = TimeSpan.FromMinutes(2));
+        services
+            .AddHttpClient<HttpAiProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddNevmaResilience(TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(8));
+        services
+            .AddHttpClient<HttpSpeechToTextProvider>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .AddNevmaResilience(TimeSpan.FromMinutes(2), TimeSpan.FromSeconds(45));
         services.AddTransient<IAiProvider, HttpAiProvider>();
         services.AddTransient<ISpeechToTextProvider, HttpSpeechToTextProvider>();
         services.AddTransient<IIntentParser, HybridIntentParser>();
         services.AddScoped<ICommandExecutor, BackendCommandExecutor>();
         services.AddScoped<CommandService>();
-        services.AddHttpClient("Planning", client => client.BaseAddress = new Uri(configuration["Services:Planning"] ?? "http://localhost:5276"));
-        services.AddHttpClient("Messaging", client => client.BaseAddress = new Uri(configuration["Services:Messaging"] ?? "http://localhost:5085"));
+        services
+            .AddHttpClient("Planning", client => client.BaseAddress = new Uri(configuration["Services:Planning"] ?? "http://localhost:5276"))
+            .AddNevmaResilience();
+        services
+            .AddHttpClient("Messaging", client => client.BaseAddress = new Uri(configuration["Services:Messaging"] ?? "http://localhost:5085"))
+            .AddNevmaResilience();
         return services;
     }
 }

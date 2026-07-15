@@ -4,6 +4,7 @@ using Nevma.Contracts.Home;
 using Nevma.Contracts.Identity;
 using Nevma.Contracts.Notifications;
 using Nevma.Contracts.Planning;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Gateway.Home;
 
@@ -72,15 +73,28 @@ public sealed class HomeService(
         var client = httpClientFactory.CreateClient(clientName);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Authorization = authorization;
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.SendAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception.IsTransientHttpFailure(cancellationToken))
         {
             throw new HomeAggregationException(
-                $"{clientName} returned status {(int)response.StatusCode} while building Home.");
+                $"{clientName} was unavailable while building Home.",
+                exception);
         }
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HomeAggregationException(
+                    $"{clientName} returned status {(int)response.StatusCode} while building Home.");
+            }
 
-        return await response.Content.ReadFromJsonAsync<T>(cancellationToken)
-            ?? throw new HomeAggregationException($"{clientName} returned an empty Home response.");
+            return await response.Content.ReadFromJsonAsync<T>(cancellationToken)
+                ?? throw new HomeAggregationException($"{clientName} returned an empty Home response.");
+        }
     }
 
     private static string CreateCalendarPath(DateTimeOffset now)
@@ -91,4 +105,9 @@ public sealed class HomeService(
     }
 }
 
-public sealed class HomeAggregationException(string message) : Exception(message);
+public sealed class HomeAggregationException : Exception
+{
+    public HomeAggregationException(string message) : base(message) { }
+    public HomeAggregationException(string message, Exception innerException)
+        : base(message, innerException) { }
+}

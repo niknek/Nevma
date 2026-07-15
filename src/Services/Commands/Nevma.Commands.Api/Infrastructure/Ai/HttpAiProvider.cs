@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using Nevma.Commands.Api.Application;
 using Nevma.Commands.Api.Domain;
 using Nevma.Contracts.Commands;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Commands.Api.Infrastructure.Ai;
 
@@ -58,8 +59,8 @@ public sealed class HttpAiProvider(
                 proposal.Arguments.Value.GetRawText()));
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or JsonException ||
-            exception is TaskCanceledException && !cancellationToken.IsCancellationRequested)
+            exception is JsonException ||
+            exception.IsTransientHttpFailure(cancellationToken))
         {
             logger.LogWarning(exception, "Command AI provider was unavailable.");
             return new AiInterpretationResult.Unavailable();

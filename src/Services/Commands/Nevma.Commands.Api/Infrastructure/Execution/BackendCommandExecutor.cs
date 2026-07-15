@@ -4,6 +4,7 @@ using System.Text.Json;
 using Nevma.Commands.Api.Application;
 using Nevma.Commands.Api.Domain;
 using Nevma.Contracts.Commands;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Commands.Api.Infrastructure.Execution;
 
@@ -24,30 +25,41 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
             request.Content = new StringContent(command.ArgumentsJson, Encoding.UTF8, "application/json");
 
         var client = clientFactory.CreateClient(target.ClientName);
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            return new ExecutionResult(
-                false,
-                null,
-                $"{target.ClientName} rejected the command with status {(int)response.StatusCode}.");
+        HttpResponseMessage response;
+        try
+        {
+            response = await client.SendAsync(request, cancellationToken);
+        }
+        catch (Exception exception) when (exception.IsTransientHttpFailure(cancellationToken))
+        {
+            return new ExecutionResult(false, null, $"{target.ClientName} is temporarily unavailable.");
+        }
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+                return new ExecutionResult(
+                    false,
+                    null,
+                    $"{target.ClientName} rejected the command with status {(int)response.StatusCode}.");
 
-        if (command.Intent == CommandIntent.DeleteTask)
-            return new ExecutionResult(true, target.ResourcePrefix, null);
+            if (command.Intent == CommandIntent.DeleteTask)
+                return new ExecutionResult(true, target.ResourcePrefix, null);
 
-        if (response.Content.Headers.ContentLength == 0)
-            return new ExecutionResult(true, target.ResourcePrefix, null);
+            if (response.Content.Headers.ContentLength == 0)
+                return new ExecutionResult(true, target.ResourcePrefix, null);
 
-        using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(cancellationToken));
-        if (!document.RootElement.TryGetProperty("id", out var id) || !id.TryGetGuid(out var resourceId))
-            return new ExecutionResult(false, null, $"{target.ClientName} response did not contain a resource identifier.");
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(cancellationToken));
+            if (!document.RootElement.TryGetProperty("id", out var id) || !id.TryGetGuid(out var resourceId))
+                return new ExecutionResult(false, null, $"{target.ClientName} response did not contain a resource identifier.");
 
-        var resource = command.Intent == CommandIntent.SendMessage
-            ? $"{target.ResourcePrefix}/{resourceId:N}"
-            : command.Intent is CommandIntent.CompleteTask or CommandIntent.AcceptMeeting or
-                CommandIntent.DeclineMeeting or CommandIntent.CancelMeeting
-                ? target.ResourcePrefix
-                : $"{target.ResourcePrefix}/{resourceId:N}";
-        return new ExecutionResult(true, resource, null);
+            var resource = command.Intent == CommandIntent.SendMessage
+                ? $"{target.ResourcePrefix}/{resourceId:N}"
+                : command.Intent is CommandIntent.CompleteTask or CommandIntent.AcceptMeeting or
+                    CommandIntent.DeclineMeeting or CommandIntent.CancelMeeting
+                    ? target.ResourcePrefix
+                    : $"{target.ResourcePrefix}/{resourceId:N}";
+            return new ExecutionResult(true, resource, null);
+        }
     }
 
     public async Task<bool> UndoAsync(
@@ -68,8 +80,15 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
 
         using var request = new HttpRequestMessage(undo.Method, undo.Path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await clientFactory.CreateClient(undo.ClientName).SendAsync(request, cancellationToken);
-        return response.IsSuccessStatusCode;
+        try
+        {
+            using var response = await clientFactory.CreateClient(undo.ClientName).SendAsync(request, cancellationToken);
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception exception) when (exception.IsTransientHttpFailure(cancellationToken))
+        {
+            return false;
+        }
     }
 
     private static CommandTarget? CreateTarget(CommandRequest command)

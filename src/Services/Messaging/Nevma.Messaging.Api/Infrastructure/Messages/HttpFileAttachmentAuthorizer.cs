@@ -2,10 +2,13 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Nevma.Contracts.Files;
 using Nevma.Messaging.Api.Application.Messages;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Messaging.Api.Infrastructure.Messages;
 
-public sealed class HttpFileAttachmentAuthorizer(IHttpClientFactory clientFactory)
+public sealed class HttpFileAttachmentAuthorizer(
+    IHttpClientFactory clientFactory,
+    ILogger<HttpFileAttachmentAuthorizer> logger)
     : IFileAttachmentAuthorizer
 {
     public async Task<bool> AuthorizeAsync(
@@ -16,25 +19,33 @@ public sealed class HttpFileAttachmentAuthorizer(IHttpClientFactory clientFactor
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(accessToken)) return false;
-        var client = clientFactory.CreateClient("Files");
-        foreach (var fileId in fileIds)
+        try
         {
-            using var metadata = new HttpRequestMessage(HttpMethod.Get, $"/api/files/{fileId}");
-            metadata.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            using var metadataResponse = await client.SendAsync(metadata, cancellationToken);
-            if (!metadataResponse.IsSuccessStatusCode) return false;
-
-            foreach (var participantId in participantIds.Where(id => id != senderId))
+            var client = clientFactory.CreateClient("Files");
+            foreach (var fileId in fileIds)
             {
-                using var grant = new HttpRequestMessage(HttpMethod.Post, $"/api/files/{fileId}/grants")
+                using var metadata = new HttpRequestMessage(HttpMethod.Get, $"/api/files/{fileId}");
+                metadata.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                using var metadataResponse = await client.SendAsync(metadata, cancellationToken);
+                if (!metadataResponse.IsSuccessStatusCode) return false;
+
+                foreach (var participantId in participantIds.Where(id => id != senderId))
                 {
-                    Content = JsonContent.Create(new GrantFileAccessRequest(participantId))
-                };
-                grant.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-                using var grantResponse = await client.SendAsync(grant, cancellationToken);
-                if (!grantResponse.IsSuccessStatusCode) return false;
+                    using var grant = new HttpRequestMessage(HttpMethod.Post, $"/api/files/{fileId}/grants")
+                    {
+                        Content = JsonContent.Create(new GrantFileAccessRequest(participantId))
+                    };
+                    grant.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+                    using var grantResponse = await client.SendAsync(grant, cancellationToken);
+                    if (!grantResponse.IsSuccessStatusCode) return false;
+                }
             }
+            return true;
         }
-        return true;
+        catch (Exception exception) when (exception.IsTransientHttpFailure(cancellationToken))
+        {
+            logger.LogWarning(exception, "File authorization dependency was unavailable.");
+            return false;
+        }
     }
 }

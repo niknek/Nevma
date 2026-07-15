@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using Nevma.Commands.Api.Application;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Commands.Api.Infrastructure.Speech;
 
@@ -44,8 +45,8 @@ public sealed class HttpSpeechToTextProvider(
                 : new SpeechToTextResult.Invalid("The speech provider returned an invalid transcript.");
         }
         catch (Exception exception) when (
-            exception is HttpRequestException or System.Text.Json.JsonException ||
-            exception is TaskCanceledException && !cancellationToken.IsCancellationRequested)
+            exception is System.Text.Json.JsonException ||
+            exception.IsTransientHttpFailure(cancellationToken))
         {
             logger.LogWarning(exception, "Speech provider was unavailable.");
             return new SpeechToTextResult.Unavailable();

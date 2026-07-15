@@ -1,5 +1,6 @@
 using System.Threading.RateLimiting;
 using Nevma.Gateway.Home;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Gateway;
 
@@ -48,6 +49,8 @@ public static class DependencyInjection
     {
         var address = configuration[$"Services:{name}"]
             ?? throw new InvalidOperationException($"Services:{name} is required.");
-        services.AddHttpClient(name, client => client.BaseAddress = new Uri(address, UriKind.Absolute));
+        services
+            .AddHttpClient(name, client => client.BaseAddress = new Uri(address, UriKind.Absolute))
+            .AddNevmaResilience(TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(4));
     }
 }
