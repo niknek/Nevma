@@ -32,6 +32,22 @@ public interface IFileScanner
     Task<FileScanResult> ScanAsync(Stream content, CancellationToken cancellationToken = default);
 }
 
+public interface IFileContentProcessor
+{
+    Task<FileProcessingResult> ProcessAsync(
+        string contentType,
+        ReadOnlyMemory<byte> content,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed record FileProcessingResult(byte[]? Content, string? Error)
+{
+    public bool IsSuccess => Content is not null && Error is null;
+
+    public static FileProcessingResult Success(byte[] content) => new(content, null);
+    public static FileProcessingResult Invalid(string error) => new(null, error);
+}
+
 public sealed record FileScanResult(bool IsSafe, string? ThreatName, bool IsAvailable = true)
 {
     public static FileScanResult Safe { get; } = new(true, null);

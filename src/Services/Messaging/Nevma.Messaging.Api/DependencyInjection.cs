@@ -13,6 +13,8 @@ using Nevma.Messaging.Api.Infrastructure.Realtime;
 using Nevma.Messaging.Api.Application.Presence;
 using StackExchange.Redis;
 using Nevma.ServiceDefaults.Extensions;
+using Nevma.Messaging.Api.Application.Search;
+using Nevma.Messaging.Api.Infrastructure.Search;
 
 namespace Nevma.Messaging.Api;
 
@@ -69,6 +71,7 @@ public static class DependencyInjection
         }
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
+        services.AddScoped<IMessagingSearchService, EfMessagingSearchService>();
         services.AddScoped<PlanningEventHandler>();
         services
             .AddHttpClient("Files", client =>

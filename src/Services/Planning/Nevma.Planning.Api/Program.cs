@@ -22,5 +22,6 @@ app.MapHealthChecks("/health");
 app.MapMeetingInvitationEndpoints();
 app.MapCalendarEndpoints();
 app.MapTaskEndpoints();
+app.MapSearchEndpoints();
 
 app.Run();

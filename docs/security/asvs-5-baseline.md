@@ -13,7 +13,7 @@ remaining operational controls before production deployment.
 | Multi-factor authentication | TOTP setup and verification, one-time recovery codes, MFA login challenge, token revocation after MFA changes | `MultiFactorAuthenticationTests` and OpenAPI contract gate |
 | Session management | Non-persistent secure host cookies, explicit device sessions, per-session and global revocation | Identity and end-to-end tests |
 | Access control | Bearer authentication by default on user resources and ownership checks in service application layers | Service tests and live workflow test |
-| Input and API safety | Request-size limits, strict upload allow-list, command confirmation, idempotency and concurrency controls | Unit, contract, load and end-to-end tests |
+| Input and API safety | Request-size limits, upload allow-list, fail-closed malware scanning, bounded image decoding and metadata-free normalization, command confirmation, idempotency and concurrency controls | Unit, contract, load and end-to-end tests |
 | Cryptography | External production signing/encryption certificates, encrypted data-protection keys, protected push tokens | Production configuration validation and startup failure on missing certificates |
 | Logging and monitoring | Correlation IDs, OpenTelemetry, user-visible security events, Prometheus alerts and Grafana dashboard | Service-default tests and observability configuration |
 | HTTP security | HSTS outside Development, restrictive CSP, no sniffing, frame denial, referrer and permissions policies | API integration tests |
@@ -38,7 +38,7 @@ remaining operational controls before production deployment.
 
 - Complete a route-by-route authorization matrix for every role and resource relationship.
 - Add an independent penetration test and ASVS control review before claiming a verification level.
-- Add malware scanning and media normalization for uploaded files before broadening the upload
-  allow-list.
+- Keep complex document formats outside the upload allow-list until they have a dedicated sandboxed
+  parser and content-disarm process.
 - Validate proxy trust configuration and certificate rotation in the real hosting environment.
 - Define organization-level incident response, audit retention and privacy policies.

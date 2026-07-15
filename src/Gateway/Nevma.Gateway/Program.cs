@@ -1,5 +1,6 @@
 using Nevma.Gateway;
 using Nevma.Gateway.Home;
+using Nevma.Gateway.Search;
 using Nevma.ServiceDefaults.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,6 +36,7 @@ app.Use(async (context, next) =>
 });
 app.MapHealthChecks("/health").DisableRateLimiting();
 app.MapHomeEndpoints();
+app.MapSearchEndpoints();
 app.MapReverseProxy();
 
 app.Run();

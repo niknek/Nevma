@@ -14,7 +14,7 @@ if (Test-Path -LiteralPath $pidPath) {
     foreach ($entry in $entries) {
         $process = Get-Process -Id $entry.ProcessId -ErrorAction SilentlyContinue
         if ($process -and $process.ProcessName -eq 'dotnet') {
-            Stop-Process -Id $entry.ProcessId
+            Stop-Process -Id $entry.ProcessId -ErrorAction SilentlyContinue
             Write-Host "Stopped $($entry.Name)" -ForegroundColor Yellow
         }
     }

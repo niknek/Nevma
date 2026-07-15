@@ -15,6 +15,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapFileEndpoints();
+app.MapSearchEndpoints();
 app.Run();
 
 public partial class Program;

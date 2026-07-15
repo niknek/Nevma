@@ -231,6 +231,8 @@ services:
       Services__Identity: http://identity:8080
       Services__Planning: http://planning:8080
       Services__Notifications: http://notifications:8080
+      Services__Messaging: http://messaging:8080
+      Services__Files: http://files:8080
       ReverseProxy__Clusters__identity__Destinations__primary__Address: http://identity:8080
       ReverseProxy__Clusters__planning__Destinations__primary__Address: http://planning:8080
       ReverseProxy__Clusters__messaging__Destinations__primary__Address: http://messaging:8080

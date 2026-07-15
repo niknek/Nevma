@@ -22,5 +22,6 @@ app.UseAuthorization();
 app.MapHealthChecks("/health");
 app.MapHub<ChatHub>("/hubs/chat").RequireAuthorization();
 app.MapConversationEndpoints();
+app.MapSearchEndpoints();
 
 app.Run();

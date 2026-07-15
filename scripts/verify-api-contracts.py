@@ -9,6 +9,7 @@ from pathlib import Path
 CONTRACTS = {
     "gateway": ("http://localhost:5033", {
         "/api/home": {"get"},
+        "/api/search": {"get"},
     }),
     "identity": ("https://localhost:7293", {
         "/api/auth/register": {"post"},
@@ -25,6 +26,7 @@ CONTRACTS = {
         "/connect/authorize": {"get"},
     }),
     "planning": ("http://localhost:5276", {
+        "/api/search": {"get"},
         "/api/tasks": {"get", "post"},
         "/api/tasks/{id}/complete": {"post"},
         "/api/calendar": {"get"},
@@ -33,6 +35,7 @@ CONTRACTS = {
         "/api/meeting-invitations/{id}/counter-propose": {"post"},
     }),
     "messaging": ("http://localhost:5085", {
+        "/api/search": {"get"},
         "/api/conversations": {"get", "post"},
         "/api/conversations/{conversationId}/messages": {"get", "post"},
         "/api/conversations/{conversationId}/messages/{messageId}/receipts": {"post"},
@@ -45,6 +48,7 @@ CONTRACTS = {
         "/api/push-devices": {"post"},
     }),
     "files": ("http://localhost:5106", {
+        "/api/search": {"get"},
         "/api/files": {"post"},
         "/api/files/{id}": {"get", "delete"},
         "/api/files/{id}/download-url": {"post"},

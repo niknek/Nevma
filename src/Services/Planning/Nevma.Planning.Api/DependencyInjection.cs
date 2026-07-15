@@ -7,6 +7,8 @@ using Nevma.Planning.Api.Application.Tasks;
 using Nevma.Planning.Api.Infrastructure.Tasks;
 using Nevma.Planning.Api.Infrastructure.Outbox;
 using Nevma.Planning.Api.Infrastructure.Messaging;
+using Nevma.Planning.Api.Application.Search;
+using Nevma.Planning.Api.Infrastructure.Search;
 
 namespace Nevma.Planning.Api;
 
@@ -33,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<PlanningService>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
         services.AddScoped<TaskService>();
+        services.AddScoped<IPlanningSearchService, EfPlanningSearchService>();
         services.AddScoped<TaskReminderProcessor>();
         services.AddHostedService<TaskReminderWorker>();
 

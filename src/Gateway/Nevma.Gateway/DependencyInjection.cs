@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Nevma.Gateway.Home;
 using Nevma.ServiceDefaults.Extensions;
+using Nevma.Gateway.Search;
 
 namespace Nevma.Gateway;
 
@@ -37,9 +38,12 @@ public static class DependencyInjection
         });
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<HomeService>();
+        services.AddScoped<GlobalSearchService>();
         AddServiceClient(services, configuration, "Identity");
         AddServiceClient(services, configuration, "Planning");
         AddServiceClient(services, configuration, "Notifications");
+        AddServiceClient(services, configuration, "Messaging");
+        AddServiceClient(services, configuration, "Files");
 
         return services;
     }

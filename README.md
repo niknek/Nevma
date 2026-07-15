@@ -19,6 +19,10 @@ The authenticated Gateway endpoint `GET /api/home` composes the mobile Home view
 APIs in parallel. It returns the next task, urgent tasks, upcoming calendar events, pending
 connections, and unread notifications without reading another service's database.
 
+`GET /api/search?q=...` performs an authenticated, partial-failure-tolerant search across the
+caller's planning items, conversations/messages, and accessible files. Each source applies its
+own ownership or participant rules before the Gateway merges and sorts results.
+
 ## Local development
 
 The repository is pinned to .NET SDK 10.0.301.
@@ -114,6 +118,11 @@ Mobile authorization requests should include `device_id`, `device_name`, and `de
 Identity binds the resulting access and refresh tokens to a durable device session. Authenticated
 clients can list sessions at `GET /api/auth/sessions` and revoke one with
 `DELETE /api/auth/sessions/{id}`; revocation invalidates every token for that authorization.
+
+Authenticated users can configure TOTP MFA under `/api/auth/mfa`, regenerate one-time recovery
+codes, and inspect recent sign-in/security activity at `/api/auth/security-events`. Enabling or
+disabling MFA revokes existing authorizations. Uploaded images are malware-scanned, dimension
+checked, decoded, and re-encoded before storage so embedded metadata is not retained.
 
 Password reset and email-confirmation endpoints use ASP.NET Core Identity's protected,
 single-purpose tokens. SMTP delivery is disabled locally. Enable `EmailDelivery__Enabled` only

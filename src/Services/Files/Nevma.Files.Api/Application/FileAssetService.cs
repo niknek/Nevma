@@ -9,6 +9,7 @@ public sealed class FileAssetService(
     IFileAssetRepository repository,
     IFileStorage storage,
     IFileScanner scanner,
+    IFileContentProcessor contentProcessor,
     IFilesUnitOfWork unitOfWork,
     TimeProvider timeProvider,
     IOptions<FileDeliveryOptions> deliveryOptions,
@@ -48,15 +49,22 @@ public sealed class FileAssetService(
             return new FileUploadResult.Rejected("File failed the security scan.");
         }
 
-        var hash = Convert.ToHexString(SHA256.HashData(buffer.GetBuffer().AsSpan(0, (int)buffer.Length))).ToLowerInvariant();
+        var processed = await contentProcessor.ProcessAsync(
+            upload.ContentType,
+            buffer.GetBuffer().AsMemory(0, (int)buffer.Length),
+            cancellationToken);
+        if (!processed.IsSuccess)
+            return new FileUploadResult.Invalid("file", processed.Error ?? "File processing failed.");
+        var content = processed.Content ?? throw new InvalidOperationException("Processed content was not returned.");
+        var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
         var storageKey = $"{ownerId:N}/{Guid.NewGuid():N}";
-        buffer.Position = 0;
-        await storage.SaveAsync(storageKey, buffer, cancellationToken);
+        await using var processedStream = new MemoryStream(content, writable: false);
+        await storage.SaveAsync(storageKey, processedStream, cancellationToken);
         var asset = FileAsset.Create(
             ownerId,
             fileName,
             upload.ContentType.ToLowerInvariant(),
-            buffer.Length,
+            content.Length,
             hash,
             storageKey,
             timeProvider.GetUtcNow());

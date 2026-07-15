@@ -5,8 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using Nevma.Files.Api.Application;
 using Nevma.Files.Api.Infrastructure.Authentication;
 using Nevma.Files.Api.Infrastructure.Persistence;
+using Nevma.Files.Api.Infrastructure.Processing;
 using Nevma.Files.Api.Infrastructure.Scanning;
 using Nevma.Files.Api.Infrastructure.Storage;
+using Nevma.Files.Api.Application.Search;
+using Nevma.Files.Api.Infrastructure.Search;
 
 namespace Nevma.Files.Api;
 
@@ -28,6 +31,7 @@ public static class DependencyInjection
         services.AddFilesAuthentication(configuration);
         services.AddScoped<IFilesUnitOfWork>(provider => provider.GetRequiredService<FilesDbContext>());
         services.AddScoped<IFileAssetRepository, EfFileAssetRepository>();
+        services.AddScoped<IFileSearchService, EfFileSearchService>();
         services.Configure<S3StorageOptions>(configuration.GetSection(S3StorageOptions.SectionName));
         services.Configure<FileDeliveryOptions>(configuration.GetSection(S3StorageOptions.SectionName));
         services.Configure<ClamAvOptions>(configuration.GetSection(ClamAvOptions.SectionName));
@@ -46,6 +50,7 @@ public static class DependencyInjection
             string.Equals(configuration["MalwareScanning:Provider"], "ClamAV", StringComparison.OrdinalIgnoreCase)
                 ? ActivatorUtilities.CreateInstance<ClamAvScanner>(provider)
                 : ActivatorUtilities.CreateInstance<SafeContentScanner>(provider));
+        services.AddSingleton<IFileContentProcessor, SkiaFileContentProcessor>();
         services.AddScoped<FileAssetService>();
         return services;
     }

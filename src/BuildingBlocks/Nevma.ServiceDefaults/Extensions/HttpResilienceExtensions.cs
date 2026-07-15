@@ -49,7 +49,8 @@ public static class HttpResilienceExtensions
             };
             options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 5;
-            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(
+                Math.Max(30, singleAttemptTimeout.TotalSeconds * 2));
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
             options.CircuitBreaker.OnOpened = _ =>
             {

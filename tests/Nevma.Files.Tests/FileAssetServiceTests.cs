@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Nevma.Files.Api.Application;
 using Nevma.Files.Api.Infrastructure.Persistence;
+using Nevma.Files.Api.Infrastructure.Search;
 
 namespace Nevma.Files.Tests;
 
@@ -96,6 +97,25 @@ public sealed class FileAssetServiceTests
         Assert.InRange(result.Download.ExpiresAt, DateTimeOffset.UtcNow.AddMinutes(4), DateTimeOffset.UtcNow.AddMinutes(6));
     }
 
+    [Fact]
+    public async Task File_search_applies_the_same_access_rules_as_downloads()
+    {
+        await using var context = CreateContext();
+        var storage = new MemoryStorage();
+        var ownerId = Guid.NewGuid();
+        var bytes = "%PDF-1.7\nroadmap"u8.ToArray();
+        var upload = Assert.IsType<FileUploadResult.Uploaded>(await CreateService(context, storage).UploadAsync(
+            ownerId,
+            new FileUpload("roadmap.pdf", "application/pdf", bytes.Length, new MemoryStream(bytes))));
+        var search = new EfFileSearchService(context);
+
+        var ownerResults = await search.SearchAsync(ownerId, "roadmap", 20);
+        var strangerResults = await search.SearchAsync(Guid.NewGuid(), "roadmap", 20);
+
+        Assert.Equal(upload.File.Id, Assert.Single(ownerResults).Id);
+        Assert.Empty(strangerResults);
+    }
+
     private static FileAssetService CreateService(
         FilesDbContext context,
         MemoryStorage storage,
@@ -104,6 +124,7 @@ public sealed class FileAssetServiceTests
             new EfFileAssetRepository(context),
             storage,
             scanner ?? new AlwaysSafeScanner(),
+            new PassThroughProcessor(),
             context,
             TimeProvider.System,
             Options.Create(new FileDeliveryOptions()),
@@ -122,6 +143,15 @@ public sealed class FileAssetServiceTests
     {
         public Task<FileScanResult> ScanAsync(Stream content, CancellationToken cancellationToken = default) =>
             Task.FromResult(FileScanResult.Unavailable);
+    }
+
+    private sealed class PassThroughProcessor : IFileContentProcessor
+    {
+        public Task<FileProcessingResult> ProcessAsync(
+            string contentType,
+            ReadOnlyMemory<byte> content,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(FileProcessingResult.Success(content.ToArray()));
     }
 
     private sealed class MemoryStorage : IFileStorage

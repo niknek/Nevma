@@ -11,6 +11,7 @@ using Nevma.Contracts.Identity;
 using Nevma.Contracts.Messaging;
 using Nevma.Contracts.Notifications;
 using Nevma.Contracts.Planning;
+using Nevma.Contracts.Search;
 
 namespace Nevma.EndToEndTests;
 
@@ -77,6 +78,10 @@ public sealed class CoreWorkflowTests
         Assert.NotNull(home);
         Assert.Equal(task.Id, home.NextTask?.Id);
         Assert.Contains(home.UrgentTasks, item => item.Id == task.Id);
+        var search = await gateway.GetFromJsonAsync<SearchResponse>(
+            $"/api/search?q={Uri.EscapeDataString(suffix[..8])}");
+        Assert.Contains(search!.Items, item => item.Kind == "task" && item.Id == task.Id);
+        Assert.Empty(search.UnavailableSources);
 
         using var commands = CreateClient(CommandsUri, organizerToken);
         var voiceTaskTitle = $"Voice E2E task {suffix[..8]}";
