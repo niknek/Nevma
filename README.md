@@ -19,6 +19,27 @@ Voice-first planning and collaboration platform.
 
 The repository is pinned to .NET SDK 10.0.301.
 
+Docker Desktop provides PostgreSQL, RabbitMQ, Redis, and Jaeger for local development. The setup
+script creates an ignored `.env` with random credentials, starts the containers, builds the
+solution, and applies all six service migrations:
+
+```powershell
+.\scripts\setup-local.ps1
+.\scripts\start-local.ps1 -SkipSetup
+```
+
+The Gateway is then available at `http://localhost:5033`. RabbitMQ management is at
+`http://localhost:15672` and Jaeger tracing is at `http://localhost:16686`. The RabbitMQ username
+and password are stored in the local `.env` file. Stop the APIs, or the APIs and containers, with:
+
+```powershell
+.\scripts\stop-local.ps1
+.\scripts\stop-local.ps1 -Infrastructure
+```
+
+Docker ports bind to `127.0.0.1` only. Redis is provisioned with authentication and persistence
+for the later SignalR scale-out slice; PostgreSQL remains the current source of truth.
+
 ```powershell
 dotnet restore Nevma.slnx
 dotnet build Nevma.slnx

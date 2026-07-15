@@ -11,3 +11,4 @@ TestResults/
 coverage/
 appsettings.Local.json
 .env
+.local/
