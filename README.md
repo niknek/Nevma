@@ -41,6 +41,17 @@ and password are stored in the local `.env` file. Stop the APIs, or the APIs and
 .\scripts\stop-local.ps1 -Infrastructure
 ```
 
+The OpenTelemetry Collector receives local OTLP traffic on ports `4317` and `4318` and forwards
+traces to Jaeger. Start the optional Prometheus and Grafana stack with:
+
+```powershell
+docker compose --profile observability up -d
+```
+
+Prometheus is available at `http://localhost:9090` and Grafana at `http://localhost:3000`.
+Grafana is preconfigured with the Nevma backend dashboard, Prometheus alerts, and Jaeger traces.
+Set `GRAFANA_ADMIN_PASSWORD` in `.env`; the local fallback password must never be used in production.
+
 Docker ports bind to `127.0.0.1` only. Messaging uses Redis for the authenticated SignalR
 backplane and shared presence state; PostgreSQL remains the source of truth for conversations
 and messages. Connected clients should invoke the `Heartbeat` hub method at least once per minute.
@@ -55,6 +66,16 @@ dotnet test tests/Nevma.EndToEndTests
 It exercises registration, OAuth authorization code with PKCE, contacts, meeting acceptance,
 calendar persistence, RabbitMQ notifications, and conversation integration. The test is skipped
 in the normal unit-test run when `NEVMA_RUN_E2E` is not enabled.
+
+The CI workflow also runs a short k6 health-load gate. Run an authenticated staging load test with:
+
+```powershell
+$env:ACCESS_TOKEN="<short-lived-test-token>"
+$env:GATEWAY_URL="https://staging-api.nevma.example.com"
+docker run --rm -e ACCESS_TOKEN -e GATEWAY_URL `
+  -v "${PWD}/tests/load:/scripts:ro" grafana/k6:2.0.0 `
+  run /scripts/authenticated-journey.js
+```
 
 ```powershell
 dotnet restore Nevma.slnx

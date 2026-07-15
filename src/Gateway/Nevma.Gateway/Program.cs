@@ -33,7 +33,7 @@ app.Use(async (context, next) =>
     }
     await next(context);
 });
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").DisableRateLimiting();
 app.MapHomeEndpoints();
 app.MapReverseProxy();
 

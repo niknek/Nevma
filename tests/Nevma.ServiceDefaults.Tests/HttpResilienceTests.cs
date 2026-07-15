@@ -1,4 +1,5 @@
 using System.Net;
+using System.Diagnostics.Metrics;
 using Microsoft.Extensions.DependencyInjection;
 using Nevma.ServiceDefaults.Extensions;
 
@@ -9,6 +10,19 @@ public sealed class HttpResilienceTests
     [Fact]
     public async Task Transient_get_failures_are_retried()
     {
+        var retries = 0;
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, meterListener) =>
+            {
+                if (instrument.Meter.Name == "Nevma.Resilience" &&
+                    instrument.Name == "nevma.http.client.retries")
+                    meterListener.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((_, measurement, _, _) =>
+            Interlocked.Add(ref retries, checked((int)measurement)));
+        listener.Start();
         var handler = new RecordingHandler(
             HttpStatusCode.ServiceUnavailable,
             HttpStatusCode.ServiceUnavailable,
@@ -20,6 +34,7 @@ public sealed class HttpResilienceTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(3, handler.CallCount);
+        Assert.Equal(2, retries);
     }
 
     [Fact]

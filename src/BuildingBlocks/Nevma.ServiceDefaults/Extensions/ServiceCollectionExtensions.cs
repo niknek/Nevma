@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
                 metrics.AddAspNetCoreInstrumentation();
                 metrics.AddHttpClientInstrumentation();
                 metrics.AddRuntimeInstrumentation();
+                metrics.AddMeter(HttpResilienceExtensions.MeterName);
                 if (otlpEnabled)
                     metrics.AddOtlpExporter(options => ConfigureEndpoint(options, endpoint));
             });

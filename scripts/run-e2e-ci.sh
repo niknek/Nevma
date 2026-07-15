@@ -110,6 +110,9 @@ for url in "${health_urls[@]}"; do
 done
 
 python3 scripts/verify-api-contracts.py
+docker run --rm --network host \
+  -v "${root}/tests/load:/scripts:ro" \
+  grafana/k6:2.0.0 run /scripts/backend-health.js
 
 export NEVMA_RUN_E2E=true
 dotnet test tests/Nevma.EndToEndTests/Nevma.EndToEndTests.csproj \

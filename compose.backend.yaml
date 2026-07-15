@@ -31,7 +31,7 @@ x-common-environment: &common-environment
   Redis__Enabled: "true"
   Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD},ssl=False,abortConnect=False
   OpenTelemetry__Otlp__Enabled: "true"
-  OpenTelemetry__Otlp__Endpoint: http://jaeger:4317
+  OpenTelemetry__Otlp__Endpoint: http://otel-collector:4317
 
 x-database-environment: &database-environment
   ConnectionStrings__IdentityDatabase: Host=postgres;Port=5432;Database=nevma_identity;Username=nevma_identity;Password=${NEVMA_IDENTITY_DB_PASSWORD}

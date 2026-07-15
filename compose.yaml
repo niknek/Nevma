@@ -65,11 +65,59 @@ services:
     image: jaegertracing/jaeger:2.19.0
     restart: unless-stopped
     ports:
+      - "127.0.0.1:16686:16686"
+
+  otel-collector:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.156.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./ops/otel-collector.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
       - "127.0.0.1:4317:4317"
       - "127.0.0.1:4318:4318"
-      - "127.0.0.1:16686:16686"
+    depends_on:
+      - jaeger
+
+  prometheus:
+    image: prom/prometheus:v3.12.0-distroless
+    restart: unless-stopped
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:13.0.2
+    restart: unless-stopped
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_USER: nevma
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-nevma-local-dev}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus
+      - jaeger
 
 volumes:
   postgres-data:
   rabbitmq-data:
   redis-data:
+  prometheus-data:
+  grafana-data:
