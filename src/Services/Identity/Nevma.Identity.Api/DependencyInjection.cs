@@ -9,6 +9,7 @@ using Nevma.Identity.Api.Infrastructure.Persistence;
 using Nevma.Identity.Api.Infrastructure.Users;
 using Nevma.Identity.Api.Application.Sessions;
 using Nevma.Identity.Api.Infrastructure.Sessions;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Identity.Api;
 
@@ -20,6 +21,7 @@ public static class DependencyInjection
         IWebHostEnvironment environment)
     {
         services.AddSingleton(TimeProvider.System);
+        services.AddNevmaDataProtection(configuration, "Nevma.Identity");
         services.AddDbContext<IdentityDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("IdentityDatabase"),

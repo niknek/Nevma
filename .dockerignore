@@ -1,0 +1,12 @@
+.git
+.github
+.local
+.vs
+.vscode
+**/bin
+**/obj
+**/TestResults
+**/App_Data
+.env
+*.user
+*.suo

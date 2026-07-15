@@ -231,3 +231,41 @@ $env:MessageBroker__Uri="amqps://<user>:<password>@<host>/<vhost>"
 Publisher confirms are enabled, and failed deliveries remain in the outbox for retry. No broker
 credentials are stored in source control. Messaging consumes these events through a durable
 quorum queue, records processed event IDs in its inbox, and dead-letters malformed payloads.
+
+## Containers and production deployment
+
+All seven deployables use the root multi-stage `Dockerfile`. The final image runs as the built-in
+non-root `app` user, disables diagnostics, and contains only the ASP.NET runtime plus the published
+service. The production Compose overlay adds a one-shot EF migration job, ClamAV, API health checks,
+read-only filesystems, dropped Linux capabilities, and persistent volumes for files and protected
+Data Protection key rings.
+
+```bash
+cp .env.production.example .env.production
+# Fill every required secret and public HTTPS origin/issuer.
+docker compose \
+  --env-file .env.production \
+  -f compose.yaml \
+  -f compose.backend.yaml \
+  config
+docker compose \
+  --env-file .env.production \
+  -f compose.yaml \
+  -f compose.backend.yaml \
+  up -d --build --wait
+```
+
+`IDENTITY_CERTIFICATES_PATH` must be a read-only host directory containing `signing.pfx`,
+`encryption.pfx`, and `data-protection.pfx`, each with a private key and a separately managed
+password. Never copy these files into an image or Git. Place an HTTPS ingress in front of the
+published Gateway port and the Identity port; `NEVMA_PUBLIC_ISSUER` must exactly match the public
+Identity URL used in issued tokens. The Compose file binds both ports to loopback so the ingress is
+the only public entry point.
+
+Run database migrations as a controlled release step, verify health before shifting traffic, and
+back up PostgreSQL, RabbitMQ, file storage, and both Data Protection key volumes. S3, Firebase,
+SMTP, AI, and speech integrations remain disabled until their external credentials are supplied.
+
+The GitHub workflow performs a pinned-SDK Release build, all tests, the live OAuth/RabbitMQ/Redis
+workflow, transitive NuGet vulnerability audit, all seven container builds, and fixable high/critical
+container vulnerability scans. Dependabot monitors NuGet, GitHub Actions, and Docker dependencies.

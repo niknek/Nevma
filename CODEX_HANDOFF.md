@@ -1,6 +1,6 @@
 # Nevma - Codex Project Handoff
 
-Last updated: 2026-07-13
+Last updated: 2026-07-15
 
 ## Instructions for the next Codex
 
@@ -8,7 +8,7 @@ Last updated: 2026-07-13
 - Read this file and the repository before changing code.
 - Preserve the service boundaries and security-first direction described below.
 - Do not replace the current architecture with a monolith.
-- Do not install or introduce Docker unless the user explicitly approves it.
+- Docker was explicitly approved and is now part of the local and production setup.
 - Explain important classes and patterns in plain Greek as they are introduced; the user wants to understand the architecture while building it.
 - Before editing, describe the files and responsibilities that will change.
 - Keep changes in focused commits with natural engineering commit messages.
@@ -23,6 +23,24 @@ Last updated: 2026-07-13
 - Target framework: `.NET 10`
 - SDK pinned in `global.json`: `10.0.301`
 - EF CLI installed on the original PC: `dotnet-ef 10.0.9`
+
+## Current backend status (2026-07-15)
+
+The backend implementation is complete for the agreed first product scope:
+
+- OAuth/OIDC Authorization Code + PKCE, accounts, recovery, device sessions, profile/privacy, contacts, block/report.
+- Tasks, recurrence/reminders, calendars, meeting lifecycle, conflicts, transactional outbox, RabbitMQ delivery.
+- Durable conversations/messages, receipts/reactions/attachments, authenticated SignalR, Redis scale-out and presence.
+- Durable notifications, preferences, encrypted push tokens, Firebase adapter, retryable delivery, live SignalR/Redis notifications.
+- Secure file metadata/access grants, signature/MIME/size validation, ClamAV adapter, private local/S3 storage and signed URLs.
+- Durable voice/text command preview, confirmation, execution, audit and undo with replaceable AI and speech HTTP adapters.
+- Gateway home aggregation, strict CORS/rate limits/security headers, OpenTelemetry and health checks.
+- Live end-to-end coverage for OAuth, contacts, voice commands, planning, RabbitMQ, Redis/SignalR, notifications and sessions.
+- PostgreSQL/RabbitMQ/Redis/Jaeger local Docker setup, production container overlay, migration image, CI, audits and image scans.
+
+External production credentials remain intentionally outside Git: TLS/Identity/Data Protection certificates, SMTP,
+Firebase, managed S3 (if selected), and AI/speech provider credentials. See `README.md` and
+`.env.production.example`. The mobile frontend is a separate next phase.
 - Visual Studio used on the original PC: Visual Studio Community 2026
 
 After cloning on another PC:
@@ -157,9 +175,9 @@ Nevma.Gateway (mobile BFF / reverse proxy)
     +-- Identity Service
     +-- Planning Service
     +-- Messaging Service
-    +-- File Service (planned)
-    +-- Notification Workers (planned)
-    +-- Command / AI Service (planned)
+    +-- File Service
+    +-- Notification Workers
+    +-- Command / AI Service
 ```
 
 Each service owns its data. A service must never query another service's database directly.
@@ -576,11 +594,9 @@ Register/login
 
 ## Current Important Caveats
 
-- The existing in-memory repositories are temporary educational adapters.
-- The APIs are not secure yet and must not be deployed publicly.
-- Client-provided user IDs are placeholders until authentication exists.
-- There is no durable event broker or outbox yet.
-- There is no file service, notification service, or AI service yet.
+- Production still requires external certificates, credentials, ingress/TLS, backups, monitoring alerts, and secret rotation.
+- Provider integrations (Firebase, SMTP, S3, AI, and speech) remain disabled until their credentials are supplied.
+- CI is defined locally but its GitHub run must be observed after the next push.
 - The UI mockups are conceptual and are not implemented in code.
 - Check the current Git working tree before editing; another Codex task may have changed files.
 
@@ -590,7 +606,7 @@ Give the other Codex this repository and say:
 
 ```text
 Read CODEX_HANDOFF.md and inspect the repository. Continue from the development branch.
-Before editing, explain in Greek the next focused slice and the classes it will add.
-Start with the shared service defaults and error-handling foundation, preserve all
-current service boundaries, run build/tests/package audit, and do not add Docker yet.
+The agreed backend scope is implemented. Verify the current tree and CI status before
+changing code, preserve the service boundaries, and begin the mobile frontend as a
+separate phase unless a backend issue is reported.
 ```

@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Nevma.Notifications.Api.Application;
 using Nevma.Notifications.Api.Application.Notifications;
@@ -14,6 +13,7 @@ using Nevma.Notifications.Api.Infrastructure.Persistence;
 using Nevma.Notifications.Api.Infrastructure.PushDevices;
 using Nevma.Notifications.Api.Infrastructure.Realtime;
 using StackExchange.Redis;
+using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Notifications.Api;
 
@@ -24,7 +24,7 @@ public static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddSingleton(TimeProvider.System);
-        services.AddDataProtection().SetApplicationName("Nevma.Notifications");
+        services.AddNevmaDataProtection(configuration, "Nevma.Notifications");
         services.AddDbContext<NotificationsDbContext>(options =>
             options.UseNpgsql(
                 configuration.GetConnectionString("NotificationsDatabase"),

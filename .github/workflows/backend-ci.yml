@@ -1,0 +1,112 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+    branches: [development, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, test, and audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: 10.0.301
+
+      - name: Restore
+        run: dotnet restore Nevma.slnx
+
+      - name: Build Release
+        run: dotnet build Nevma.slnx --configuration Release --no-restore
+
+      - name: Run unit and architecture tests
+        run: >-
+          dotnet test Nevma.slnx
+          --configuration Release
+          --no-restore
+          --no-build
+          --logger "trx;LogFilePrefix=tests"
+          --results-directory TestResults
+
+      - name: Audit NuGet dependencies
+        run: dotnet list Nevma.slnx package --vulnerable --include-transitive
+
+      - name: Run live backend workflow
+        run: bash scripts/run-e2e-ci.sh
+
+      - name: Upload test and service logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-test-logs
+          path: |
+            TestResults
+            .ci-logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  containers:
+    name: Container ${{ matrix.name }}
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gateway
+            project: src/Gateway/Nevma.Gateway/Nevma.Gateway.csproj
+          - name: identity
+            project: src/Services/Identity/Nevma.Identity.Api/Nevma.Identity.Api.csproj
+          - name: planning
+            project: src/Services/Planning/Nevma.Planning.Api/Nevma.Planning.Api.csproj
+          - name: messaging
+            project: src/Services/Messaging/Nevma.Messaging.Api/Nevma.Messaging.Api.csproj
+          - name: notifications
+            project: src/Services/Notifications/Nevma.Notifications.Api/Nevma.Notifications.Api.csproj
+          - name: files
+            project: src/Services/Files/Nevma.Files.Api/Nevma.Files.Api.csproj
+          - name: commands
+            project: src/Services/Commands/Nevma.Commands.Api/Nevma.Commands.Api.csproj
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build container
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          build-args: PROJECT=${{ matrix.project }}
+          load: true
+          push: false
+          tags: nevma/${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Scan container for fixable vulnerabilities
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+        with:
+          image: nevma/${{ matrix.name }}:ci
+          fail-build: true
+          severity-cutoff: high
+          only-fixed: true
+          output-format: table

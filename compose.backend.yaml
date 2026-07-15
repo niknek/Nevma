@@ -1,0 +1,260 @@
+x-api: &api
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  healthcheck: &api-health
+    test:
+      - CMD
+      - bash
+      - -c
+      - >-
+        exec 3<>/dev/tcp/127.0.0.1/8080 &&
+        printf 'GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+        grep -q '200 OK' <&3
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 20s
+
+x-common-environment: &common-environment
+  ASPNETCORE_ENVIRONMENT: Production
+  ASPNETCORE_HTTP_PORTS: 8080
+  ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+  Authentication__Issuer: ${NEVMA_PUBLIC_ISSUER:?Set NEVMA_PUBLIC_ISSUER to the public HTTPS Identity issuer}
+  MessageBroker__Enabled: "true"
+  MessageBroker__Uri: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672/
+  Redis__Enabled: "true"
+  Redis__ConnectionString: redis:6379,password=${REDIS_PASSWORD},ssl=False,abortConnect=False
+  OpenTelemetry__Otlp__Enabled: "true"
+  OpenTelemetry__Otlp__Endpoint: http://jaeger:4317
+
+x-database-environment: &database-environment
+  ConnectionStrings__IdentityDatabase: Host=postgres;Port=5432;Database=nevma_identity;Username=nevma_identity;Password=${NEVMA_IDENTITY_DB_PASSWORD}
+  ConnectionStrings__PlanningDatabase: Host=postgres;Port=5432;Database=nevma_planning;Username=nevma_planning;Password=${NEVMA_PLANNING_DB_PASSWORD}
+  ConnectionStrings__MessagingDatabase: Host=postgres;Port=5432;Database=nevma_messaging;Username=nevma_messaging;Password=${NEVMA_MESSAGING_DB_PASSWORD}
+  ConnectionStrings__NotificationsDatabase: Host=postgres;Port=5432;Database=nevma_notifications;Username=nevma_notifications;Password=${NEVMA_NOTIFICATIONS_DB_PASSWORD}
+  ConnectionStrings__FilesDatabase: Host=postgres;Port=5432;Database=nevma_files;Username=nevma_files;Password=${NEVMA_FILES_DB_PASSWORD}
+  ConnectionStrings__CommandsDatabase: Host=postgres;Port=5432;Database=nevma_commands;Username=nevma_commands;Password=${NEVMA_COMMANDS_DB_PASSWORD}
+
+services:
+  migrations:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrations
+    restart: "no"
+    environment:
+      <<: *database-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  clamav:
+    image: clamav/clamav:1.5.3
+    restart: unless-stopped
+    volumes:
+      - clamav-data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD-SHELL", "clamdscan --ping 5"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+  identity:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Identity/Nevma.Identity.Api/Nevma.Identity.Api.csproj
+    command: ["Nevma.Identity.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+      Authentication__SigningCertificatePath: /certificates/signing.pfx
+      Authentication__SigningCertificatePassword: ${IDENTITY_SIGNING_CERTIFICATE_PASSWORD:?Set IDENTITY_SIGNING_CERTIFICATE_PASSWORD}
+      Authentication__EncryptionCertificatePath: /certificates/encryption.pfx
+      Authentication__EncryptionCertificatePassword: ${IDENTITY_ENCRYPTION_CERTIFICATE_PASSWORD:?Set IDENTITY_ENCRYPTION_CERTIFICATE_PASSWORD}
+      DataProtection__KeysPath: /var/lib/nevma/keys
+      DataProtection__CertificatePath: /certificates/data-protection.pfx
+      DataProtection__CertificatePassword: ${DATA_PROTECTION_CERTIFICATE_PASSWORD:?Set DATA_PROTECTION_CERTIFICATE_PASSWORD}
+      EmailDelivery__Enabled: ${EMAIL_DELIVERY_ENABLED:-false}
+      EmailDelivery__SmtpHost: ${SMTP_HOST:-}
+      EmailDelivery__SmtpPort: ${SMTP_PORT:-587}
+      EmailDelivery__UseSsl: ${SMTP_USE_SSL:-true}
+      EmailDelivery__Username: ${SMTP_USERNAME:-}
+      EmailDelivery__Password: ${SMTP_PASSWORD:-}
+      EmailDelivery__FromAddress: ${SMTP_FROM_ADDRESS:-}
+    ports:
+      - "127.0.0.1:${IDENTITY_HTTP_PORT:-8081}:8080"
+    volumes:
+      - ${IDENTITY_CERTIFICATES_PATH:?Set IDENTITY_CERTIFICATES_PATH}:/certificates:ro
+      - identity-keys:/var/lib/nevma/keys
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  planning:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Planning/Nevma.Planning.Api/Nevma.Planning.Api.csproj
+    command: ["Nevma.Planning.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  messaging:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Messaging/Nevma.Messaging.Api/Nevma.Messaging.Api.csproj
+    command: ["Nevma.Messaging.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+      Services__Files: http://files:8080
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+
+  notifications:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Notifications/Nevma.Notifications.Api/Nevma.Notifications.Api.csproj
+    command: ["Nevma.Notifications.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+      PushDelivery__Enabled: ${PUSH_DELIVERY_ENABLED:-false}
+      PushDelivery__ProjectId: ${FIREBASE_PROJECT_ID:-}
+      DataProtection__KeysPath: /var/lib/nevma/keys
+      DataProtection__CertificatePath: /certificates/data-protection.pfx
+      DataProtection__CertificatePassword: ${DATA_PROTECTION_CERTIFICATE_PASSWORD:?Set DATA_PROTECTION_CERTIFICATE_PASSWORD}
+    volumes:
+      - ${IDENTITY_CERTIFICATES_PATH:?Set IDENTITY_CERTIFICATES_PATH}:/certificates:ro
+      - notification-keys:/var/lib/nevma/keys
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  files:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Files/Nevma.Files.Api/Nevma.Files.Api.csproj
+    command: ["Nevma.Files.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+      FileStorage__Provider: ${FILE_STORAGE_PROVIDER:-Local}
+      FileStorage__RootPath: /var/lib/nevma/files
+      FileStorage__BucketName: ${S3_BUCKET_NAME:-}
+      FileStorage__ServiceUrl: ${S3_SERVICE_URL:-}
+      FileStorage__Region: ${S3_REGION:-eu-central-1}
+      FileStorage__AccessKey: ${S3_ACCESS_KEY:-}
+      FileStorage__SecretKey: ${S3_SECRET_KEY:-}
+      MalwareScanning__Provider: ClamAV
+      MalwareScanning__Host: clamav
+      MalwareScanning__Port: 3310
+      MalwareScanning__FailClosed: "true"
+    volumes:
+      - file-data:/var/lib/nevma/files
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      clamav:
+        condition: service_healthy
+
+  commands:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Services/Commands/Nevma.Commands.Api/Nevma.Commands.Api.csproj
+    command: ["Nevma.Commands.Api.dll"]
+    environment:
+      <<: [*common-environment, *database-environment]
+      Services__Planning: http://planning:8080
+      Services__Messaging: http://messaging:8080
+      CommandAI__Enabled: ${COMMAND_AI_ENABLED:-false}
+      CommandAI__Endpoint: ${COMMAND_AI_ENDPOINT:-}
+      CommandAI__ApiKey: ${COMMAND_AI_API_KEY:-}
+      SpeechToText__Enabled: ${SPEECH_TO_TEXT_ENABLED:-false}
+      SpeechToText__Endpoint: ${SPEECH_TO_TEXT_ENDPOINT:-}
+      SpeechToText__ApiKey: ${SPEECH_TO_TEXT_API_KEY:-}
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      planning:
+        condition: service_healthy
+      messaging:
+        condition: service_healthy
+
+  gateway:
+    <<: *api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT: src/Gateway/Nevma.Gateway/Nevma.Gateway.csproj
+    command: ["Nevma.Gateway.dll"]
+    environment:
+      <<: *common-environment
+      Cors__AllowedOrigins__0: ${NEVMA_APP_ORIGIN:?Set NEVMA_APP_ORIGIN}
+      Services__Identity: http://identity:8080
+      Services__Planning: http://planning:8080
+      Services__Notifications: http://notifications:8080
+      ReverseProxy__Clusters__identity__Destinations__primary__Address: http://identity:8080
+      ReverseProxy__Clusters__planning__Destinations__primary__Address: http://planning:8080
+      ReverseProxy__Clusters__messaging__Destinations__primary__Address: http://messaging:8080
+      ReverseProxy__Clusters__notifications__Destinations__primary__Address: http://notifications:8080
+      ReverseProxy__Clusters__files__Destinations__primary__Address: http://files:8080
+      ReverseProxy__Clusters__commands__Destinations__primary__Address: http://commands:8080
+    ports:
+      - "127.0.0.1:${GATEWAY_HTTP_PORT:-8080}:8080"
+    depends_on:
+      identity:
+        condition: service_healthy
+      planning:
+        condition: service_healthy
+      messaging:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+      files:
+        condition: service_healthy
+      commands:
+        condition: service_healthy
+
+volumes:
+  identity-keys:
+  notification-keys:
+  file-data:
+  clamav-data:

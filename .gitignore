@@ -11,4 +11,9 @@ TestResults/
 coverage/
 appsettings.Local.json
 .env
+.env.production
+secrets/
+*.pfx
+*.pem
+*.key
 .local/
