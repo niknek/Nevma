@@ -164,7 +164,26 @@ MIME type, file signature, SHA-256, authorization, and the configured scanner ad
 
 Commands never execute directly from raw voice text. `/api/commands/preview` creates a durable
 structured plan, `/confirm` executes it with the authenticated user's token, and `/undo` reverses
-supported operations. Raw transcripts are not persisted; the audit record stores their hash.
+supported operations. Raw transcripts are not persisted; the audit record stores their hash. The
+rule parser supports task creation/completion/deletion, meeting creation/acceptance/decline/
+cancellation, and conversation messages in English or Greek command prefixes.
+
+`POST /api/commands/transcribe` accepts an authenticated multipart upload named `audio` (up to
+25 MB). Speech-to-text and natural-language interpretation are provider-neutral HTTP adapters and
+are disabled until their endpoints and secrets are supplied through environment variables:
+
+```powershell
+$env:SpeechToText__Enabled="true"
+$env:SpeechToText__Endpoint="https://speech-gateway.example.com/transcribe"
+$env:SpeechToText__ApiKey="<secret>"
+$env:CommandAI__Enabled="true"
+$env:CommandAI__Endpoint="https://ai-gateway.example.com/interpret"
+$env:CommandAI__ApiKey="<secret>"
+```
+
+The AI gateway receives the untrusted transcript, current UTC time, and the allowed intent names.
+It returns `{ intent, summary, arguments }`. Every proposal is strictly deserialized and validated
+again inside Nevma; an AI response can never bypass authorization, preview, or confirmation.
 
 ## Gateway and observability
 

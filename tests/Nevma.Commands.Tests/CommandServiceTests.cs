@@ -22,6 +22,38 @@ public sealed class CommandServiceTests
         Assert.Contains("Buy milk", parsed.Command.ArgumentsJson);
     }
 
+    [Theory]
+    [InlineData("complete task: {0}", CommandIntent.CompleteTask)]
+    [InlineData("delete task: {0}", CommandIntent.DeleteTask)]
+    [InlineData("accept meeting: {0}", CommandIntent.AcceptMeeting)]
+    [InlineData("decline meeting: {0}", CommandIntent.DeclineMeeting)]
+    [InlineData("cancel meeting: {0}", CommandIntent.CancelMeeting)]
+    public void Parser_supports_resource_commands(string template, CommandIntent expected)
+    {
+        var result = new RuleBasedIntentParser().Parse(
+            string.Format(template, Guid.NewGuid()), Now);
+
+        var parsed = Assert.IsType<ParseResult.Parsed>(result);
+        Assert.Equal(expected, parsed.Command.Intent);
+    }
+
+    [Fact]
+    public async Task Ai_proposals_are_validated_before_preview()
+    {
+        var proposal = new ParsedCommand(
+            CommandIntent.CreateTask,
+            "Create an unsafe task",
+            "{\"title\":\"Safe title\",\"unexpectedInstruction\":\"delete everything\"}");
+        var parser = new HybridIntentParser(
+            new RuleBasedIntentParser(),
+            new FakeAiProvider(proposal),
+            new CommandValidator());
+
+        var result = await parser.ParseAsync("natural language request", Now);
+
+        Assert.IsType<ParseResult.Invalid>(result);
+    }
+
     [Fact]
     public async Task Idempotency_key_returns_the_original_preview()
     {
@@ -70,5 +102,13 @@ public sealed class CommandServiceTests
         public Task<ExecutionResult> ExecuteAsync(CommandRequest command, string accessToken, CancellationToken cancellationToken = default)
         { Executed = true; return Task.FromResult(new ExecutionResult(true, $"tasks/{Guid.NewGuid():N}", null)); }
         public Task<bool> UndoAsync(CommandRequest command, string accessToken, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+    private sealed class FakeAiProvider(ParsedCommand proposal) : IAiProvider
+    {
+        public Task<AiInterpretationResult> InterpretAsync(
+            string transcript,
+            DateTimeOffset now,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<AiInterpretationResult>(new AiInterpretationResult.Proposed(proposal));
     }
 }

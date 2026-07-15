@@ -22,7 +22,10 @@ public sealed class CommandService(
         var existing = await repository.FindByKeyAsync(userId, request.IdempotencyKey, cancellationToken);
         if (existing is not null)
             return new PreviewResult.Ready(ToResponse(existing), false);
-        var parseResult = parser.Parse(request.Transcript, timeProvider.GetUtcNow());
+        var parseResult = await parser.ParseAsync(
+            request.Transcript,
+            timeProvider.GetUtcNow(),
+            cancellationToken);
         if (parseResult is not ParseResult.Parsed parsed)
             return new PreviewResult.Invalid("transcript", ((ParseResult.Invalid)parseResult).Message);
 

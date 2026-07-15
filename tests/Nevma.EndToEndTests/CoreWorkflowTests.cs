@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.SignalR.Client;
+using Nevma.Contracts.Commands;
 using Nevma.Contracts.Home;
 using Nevma.Contracts.Identity;
 using Nevma.Contracts.Messaging;
@@ -20,6 +21,7 @@ public sealed class CoreWorkflowTests
     private static readonly Uri MessagingUri = new("http://localhost:5085");
     private static readonly Uri NotificationsUri = new("http://localhost:5095");
     private static readonly Uri GatewayUri = new("http://localhost:5033");
+    private static readonly Uri CommandsUri = new("http://localhost:5116");
     private const string RedirectUri = "com.nevma.app:/oauth/callback";
 
     [LiveInfrastructureFact]
@@ -75,6 +77,25 @@ public sealed class CoreWorkflowTests
         Assert.NotNull(home);
         Assert.Equal(task.Id, home.NextTask?.Id);
         Assert.Contains(home.UrgentTasks, item => item.Id == task.Id);
+
+        using var commands = CreateClient(CommandsUri, organizerToken);
+        var voiceTaskTitle = $"Voice E2E task {suffix[..8]}";
+        var previewResponse = await commands.PostAsJsonAsync(
+            "/api/commands/preview",
+            new PreviewCommandRequest($"task: {voiceTaskTitle} | priority=high", $"e2e-command-{suffix}"));
+        Assert.Equal(HttpStatusCode.Created, previewResponse.StatusCode);
+        var preview = await ReadAsync<CommandResponse>(previewResponse);
+        Assert.Equal(CommandStatus.Previewed, preview.Status);
+        var confirmResponse = await commands.PostAsync($"/api/commands/{preview.Id}/confirm", null);
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        var executed = await ReadAsync<CommandResponse>(confirmResponse);
+        Assert.Equal(CommandStatus.Executed, executed.Status);
+        var voiceTasks = await organizerPlanning.GetFromJsonAsync<List<TaskResponse>>("/api/tasks/");
+        Assert.Contains(voiceTasks!, item => item.Title == voiceTaskTitle);
+        var undoResponse = await commands.PostAsync($"/api/commands/{preview.Id}/undo", null);
+        Assert.Equal(HttpStatusCode.OK, undoResponse.StatusCode);
+        var undone = await ReadAsync<CommandResponse>(undoResponse);
+        Assert.Equal(CommandStatus.Undone, undone.Status);
 
         var title = $"E2E coffee {suffix[..8]}";
         var startsAt = DateTimeOffset.UtcNow.AddHours(2);

@@ -8,13 +8,30 @@ namespace Nevma.Commands.Api.Infrastructure.Parsing;
 
 public sealed class RuleBasedIntentParser : IIntentParser
 {
+    public Task<ParseResult> ParseAsync(
+        string transcript,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(Parse(transcript, now));
+
     public ParseResult Parse(string transcript, DateTimeOffset now)
     {
         var text = transcript.Trim();
         if (StartsWith(text, "task:", "εργασία:")) return ParseTask(text);
+        if (StartsWith(text, "complete task:", "ολοκλήρωσε εργασία:"))
+            return ParseResource(text, CommandIntent.CompleteTask, "Complete task");
+        if (StartsWith(text, "delete task:", "διέγραψε εργασία:"))
+            return ParseResource(text, CommandIntent.DeleteTask, "Delete task");
         if (StartsWith(text, "meeting:", "συνάντηση:")) return ParseMeeting(text, now);
+        if (StartsWith(text, "accept meeting:", "αποδέξου συνάντηση:"))
+            return ParseResource(text, CommandIntent.AcceptMeeting, "Accept meeting");
+        if (StartsWith(text, "decline meeting:", "απόρριψε συνάντηση:"))
+            return ParseResource(text, CommandIntent.DeclineMeeting, "Decline meeting");
+        if (StartsWith(text, "cancel meeting:", "ακύρωσε συνάντηση:"))
+            return ParseResource(text, CommandIntent.CancelMeeting, "Cancel meeting");
+        if (StartsWith(text, "message:", "μήνυμα:")) return ParseMessage(text);
         return new ParseResult.Invalid(
-            "Use 'task: title | due=ISO-date | priority=urgent' or 'meeting: user-id | title | starts=ISO-date | duration=01:00'.");
+            "The command was not understood. Use a supported task, meeting, or message command.");
     }
 
     private static ParseResult ParseTask(string text)
@@ -54,6 +71,29 @@ public sealed class RuleBasedIntentParser : IIntentParser
         var args = new CreateMeetingInvitationRequest(inviteeId, parts[1], startsAt.Value, duration, location, null);
         return new ParseResult.Parsed(new ParsedCommand(
             CommandIntent.CreateMeeting, $"Invite a user to '{parts[1]}'", JsonSerializer.Serialize(args)));
+    }
+
+    private static ParseResult ParseResource(string text, CommandIntent intent, string summary)
+    {
+        if (!Guid.TryParse(Body(text), out var id))
+            return new ParseResult.Invalid("The command must contain a valid resource identifier.");
+        return new ParseResult.Parsed(new ParsedCommand(
+            intent,
+            $"{summary} {id}",
+            JsonSerializer.Serialize(new ResourceCommandArguments(id))));
+    }
+
+    private static ParseResult ParseMessage(string text)
+    {
+        var parts = Body(text).Split('|', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || !Guid.TryParse(parts[0], out var conversationId))
+            return new ParseResult.Invalid("Message conversation must be a valid identifier.");
+        if (parts[1].Length is 0 or > 4_000)
+            return new ParseResult.Invalid("Message text must contain 1 to 4000 characters.");
+        return new ParseResult.Parsed(new ParsedCommand(
+            CommandIntent.SendMessage,
+            $"Send a message to conversation {conversationId}",
+            JsonSerializer.Serialize(new SendMessageCommandArguments(conversationId, parts[1]))));
     }
 
     private static bool StartsWith(string text, params string[] prefixes) =>

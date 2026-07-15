@@ -9,7 +9,29 @@ public interface ICommandRepository
     Task<CommandRequest?> FindByKeyAsync(Guid userId, string key, CancellationToken cancellationToken = default);
 }
 public interface ICommandsUnitOfWork { Task<int> SaveChangesAsync(CancellationToken cancellationToken = default); }
-public interface IIntentParser { ParseResult Parse(string transcript, DateTimeOffset now); }
+public interface IIntentParser
+{
+    Task<ParseResult> ParseAsync(string transcript, DateTimeOffset now, CancellationToken cancellationToken = default);
+}
+public interface IAiProvider
+{
+    Task<AiInterpretationResult> InterpretAsync(
+        string transcript,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+}
+public interface ICommandValidator
+{
+    ParseResult Validate(ParsedCommand command, DateTimeOffset now);
+}
+public interface ISpeechToTextProvider
+{
+    Task<SpeechToTextResult> TranscribeAsync(
+        Stream audio,
+        string contentType,
+        string? language,
+        CancellationToken cancellationToken = default);
+}
 public interface ICommandExecutor
 {
     Task<ExecutionResult> ExecuteAsync(CommandRequest command, string accessToken, CancellationToken cancellationToken = default);
@@ -21,3 +43,15 @@ public abstract record ParseResult
     public sealed record Invalid(string Message) : ParseResult;
 }
 public sealed record ExecutionResult(bool Success, string? Resource, string? Error);
+public abstract record AiInterpretationResult
+{
+    public sealed record Proposed(ParsedCommand Command) : AiInterpretationResult;
+    public sealed record NotUnderstood(string Message) : AiInterpretationResult;
+    public sealed record Unavailable : AiInterpretationResult;
+}
+public abstract record SpeechToTextResult
+{
+    public sealed record Transcribed(string Transcript, double? Confidence) : SpeechToTextResult;
+    public sealed record Invalid(string Message) : SpeechToTextResult;
+    public sealed record Unavailable : SpeechToTextResult;
+}

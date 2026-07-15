@@ -1,5 +1,7 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
 using Nevma.Commands.Api.Application;
+using Nevma.Commands.Api.Infrastructure.Speech;
 using Nevma.Contracts.Commands;
 
 namespace Nevma.Commands.Api.Endpoints;
@@ -21,6 +23,43 @@ public static class CommandEndpoints
                 _ => Results.StatusCode(500)
             };
         });
+        commands.MapPost("/transcribe", async (
+            HttpRequest request,
+            ISpeechToTextProvider provider,
+            IOptions<SpeechProviderOptions> options,
+            CancellationToken cancellationToken) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.BadRequest(new { message = "A multipart audio upload is required." });
+            var form = await request.ReadFormAsync(cancellationToken);
+            var audio = form.Files.GetFile("audio");
+            if (audio is null || audio.Length == 0)
+                return Results.BadRequest(new { message = "Audio is required." });
+            if (audio.Length > options.Value.MaxAudioBytes)
+                return Results.StatusCode(StatusCodes.Status413PayloadTooLarge);
+            if (!AllowedAudioTypes.Contains(audio.ContentType))
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["audio"] = ["Supported audio types are MPEG, MP4/M4A, WAV, WebM, and OGG."]
+                });
+
+            await using var stream = audio.OpenReadStream();
+            return await provider.TranscribeAsync(
+                stream,
+                audio.ContentType,
+                form["language"].FirstOrDefault(),
+                cancellationToken) switch
+            {
+                SpeechToTextResult.Transcribed transcribed => Results.Ok(
+                    new SpeechTranscriptionResponse(transcribed.Transcript, transcribed.Confidence)),
+                SpeechToTextResult.Invalid invalid => Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["audio"] = [invalid.Message] }),
+                SpeechToTextResult.Unavailable => Results.Problem(
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    title: "Speech transcription is unavailable."),
+                _ => Results.StatusCode(500)
+            };
+        }).DisableAntiforgery();
         commands.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal principal, CommandService service, CancellationToken ct) =>
         {
             if (!TryGetUserId(principal, out var userId)) return Results.Unauthorized();
@@ -50,6 +89,10 @@ public static class CommandEndpoints
         _ => Results.StatusCode(500)
     };
     private static bool TryGetUserId(ClaimsPrincipal principal, out Guid id) => Guid.TryParse(principal.FindFirstValue("sub"), out id);
+    private static readonly HashSet<string> AllowedAudioTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/x-wav", "audio/webm", "audio/ogg"
+    };
     private static bool TryGetToken(HttpRequest request, out string token)
     {
         const string prefix = "Bearer ";
