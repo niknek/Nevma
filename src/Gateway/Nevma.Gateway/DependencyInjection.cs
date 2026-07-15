@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Nevma.Gateway.Home;
 
 namespace Nevma.Gateway;
 
@@ -31,7 +32,22 @@ public static class DependencyInjection
                         AutoReplenishment = true
                     }));
         });
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<HomeService>();
+        AddServiceClient(services, configuration, "Identity");
+        AddServiceClient(services, configuration, "Planning");
+        AddServiceClient(services, configuration, "Notifications");
 
         return services;
+    }
+
+    private static void AddServiceClient(
+        IServiceCollection services,
+        IConfiguration configuration,
+        string name)
+    {
+        var address = configuration[$"Services:{name}"]
+            ?? throw new InvalidOperationException($"Services:{name} is required.");
+        services.AddHttpClient(name, client => client.BaseAddress = new Uri(address, UriKind.Absolute));
     }
 }

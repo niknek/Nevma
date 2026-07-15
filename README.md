@@ -15,6 +15,10 @@ Voice-first planning and collaboration platform.
 - `Nevma.ServiceDefaults`: shared HTTP error handling, correlation IDs, security headers,
   health checks, and reusable result primitives. It contains no business rules.
 
+The authenticated Gateway endpoint `GET /api/home` composes the mobile Home view from service
+APIs in parallel. It returns the next task, urgent tasks, upcoming calendar events, pending
+connections, and unread notifications without reading another service's database.
+
 ## Local development
 
 The repository is pinned to .NET SDK 10.0.301.

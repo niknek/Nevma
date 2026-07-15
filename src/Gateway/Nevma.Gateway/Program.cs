@@ -1,4 +1,5 @@
 using Nevma.Gateway;
+using Nevma.Gateway.Home;
 using Nevma.ServiceDefaults.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddNevmaServiceDefaults(builder.Configuration);
 builder.Services.AddGateway(builder.Configuration);
+builder.Services.AddGatewayAuthentication(builder.Configuration);
 
 var app = builder.Build();
 
@@ -17,6 +19,8 @@ if (app.Environment.IsDevelopment())
 app.UseNevmaServiceDefaults();
 app.UseCors("Gateway");
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 app.Use(async (context, next) =>
 {
     const long standardLimit = 1024 * 1024;
@@ -30,6 +34,7 @@ app.Use(async (context, next) =>
     await next(context);
 });
 app.MapHealthChecks("/health");
+app.MapHomeEndpoints();
 app.MapReverseProxy();
 
 app.Run();

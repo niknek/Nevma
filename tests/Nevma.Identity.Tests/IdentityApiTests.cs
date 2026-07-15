@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Nevma.Contracts.Identity;
+using Nevma.Identity.Api.Infrastructure.Authentication;
 
 namespace Nevma.Identity.Tests;
 
@@ -47,7 +48,9 @@ public sealed class IdentityApiTests
         await factory.InitializeDatabaseAsync();
         HttpResponseMessage? response = null;
 
-        for (var attempt = 0; attempt < 6; attempt++)
+        for (var attempt = 0;
+             attempt <= AuthenticationConfiguration.AuthenticationPermitLimit;
+             attempt++)
         {
             response?.Dispose();
             response = await client.PostAsync(

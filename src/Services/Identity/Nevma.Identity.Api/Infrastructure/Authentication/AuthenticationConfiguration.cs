@@ -13,6 +13,7 @@ namespace Nevma.Identity.Api.Infrastructure.Authentication;
 public static class AuthenticationConfiguration
 {
     public const string AuthenticationRateLimitPolicy = "authentication";
+    public const int AuthenticationPermitLimit = 10;
 
     public static IServiceCollection AddNevmaAuthentication(
         this IServiceCollection services,
@@ -117,7 +118,7 @@ public static class AuthenticationConfiguration
             $"{context.Connection.RemoteIpAddress?.ToString() ?? "unknown"}:{context.Request.Path.Value?.ToLowerInvariant()}",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
+                PermitLimit = AuthenticationPermitLimit,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
