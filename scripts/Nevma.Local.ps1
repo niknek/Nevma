@@ -95,4 +95,6 @@ function Set-NevmaProcessEnvironment {
     $env:MessageBroker__Uri = $rabbitUri
     $env:OpenTelemetry__Otlp__Enabled = 'true'
     $env:OpenTelemetry__Otlp__Endpoint = 'http://localhost:4317'
+    $env:Redis__Enabled = 'true'
+    $env:Redis__ConnectionString = "localhost:6379,password=$($Values['REDIS_PASSWORD']),ssl=False,abortConnect=False"
 }

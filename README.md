@@ -41,8 +41,9 @@ and password are stored in the local `.env` file. Stop the APIs, or the APIs and
 .\scripts\stop-local.ps1 -Infrastructure
 ```
 
-Docker ports bind to `127.0.0.1` only. Redis is provisioned with authentication and persistence
-for the later SignalR scale-out slice; PostgreSQL remains the current source of truth.
+Docker ports bind to `127.0.0.1` only. Messaging uses Redis for the authenticated SignalR
+backplane and shared presence state; PostgreSQL remains the source of truth for conversations
+and messages. Connected clients should invoke the `Heartbeat` hub method at least once per minute.
 
 Run the live first-milestone test against the started backend with:
 

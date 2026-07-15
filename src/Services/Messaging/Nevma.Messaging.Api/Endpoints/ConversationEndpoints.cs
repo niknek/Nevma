@@ -105,7 +105,7 @@ public static class ConversationEndpoints
                 userId,
                 cancellationToken))
                 return Results.NotFound();
-            return Results.Ok(presenceTracker.Get(userId));
+            return Results.Ok(await presenceTracker.GetAsync(userId));
         });
 
         conversations.MapGet("/{conversationId:guid}/messages", async (

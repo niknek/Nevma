@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.SignalR.Client;
 using Nevma.Contracts.Home;
 using Nevma.Contracts.Identity;
 using Nevma.Contracts.Messaging;
@@ -117,6 +118,29 @@ public sealed class CoreWorkflowTests
                 item.ParticipantIds.Contains(organizer.Id) && item.ParticipantIds.Contains(invitee.Id));
         });
         Assert.NotNull(conversation);
+
+        await using var hub = new HubConnectionBuilder()
+            .WithUrl(new Uri(MessagingUri, "/hubs/chat"), options =>
+            {
+                options.AccessTokenProvider = () => Task.FromResult<string?>(inviteeToken);
+            })
+            .Build();
+        await hub.StartAsync();
+        await hub.InvokeAsync("Heartbeat");
+
+        using var organizerMessaging = CreateClient(MessagingUri, organizerToken);
+        var onlinePresence = await organizerMessaging.GetFromJsonAsync<PresenceResponse>(
+            $"/api/conversations/presence/{invitee.Id}");
+        Assert.True(onlinePresence?.IsOnline);
+
+        await hub.StopAsync();
+        var offlinePresence = await PollAsync(async () =>
+        {
+            var presence = await organizerMessaging.GetFromJsonAsync<PresenceResponse>(
+                $"/api/conversations/presence/{invitee.Id}");
+            return presence is { IsOnline: false, LastSeenAt: not null } ? presence : null;
+        });
+        Assert.NotNull(offlinePresence);
     }
 
     private static async Task<UserSummary> RegisterAsync(

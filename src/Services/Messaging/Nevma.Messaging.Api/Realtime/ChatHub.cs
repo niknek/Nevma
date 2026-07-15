@@ -20,14 +20,14 @@ public sealed class ChatHub(
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, UserGroupName(userId));
-        presenceTracker.Connected(userId);
+        await presenceTracker.ConnectedAsync(userId);
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         if (TryGetUserId(out var userId))
-            presenceTracker.Disconnected(userId);
+            await presenceTracker.DisconnectedAsync(userId);
         await base.OnDisconnectedAsync(exception);
     }
 
@@ -49,6 +49,12 @@ public sealed class ChatHub(
             throw new HubException("Conversation is unavailable.");
         await Clients.OthersInGroup(ConversationGroupName(conversationId))
             .SendAsync("typing.changed", new { userId }, Context.ConnectionAborted);
+    }
+
+    public async Task Heartbeat()
+    {
+        var userId = GetUserId();
+        await presenceTracker.RefreshAsync(userId);
     }
 
     public static string ConversationGroupName(Guid conversationId) =>

@@ -4,7 +4,8 @@ namespace Nevma.Messaging.Api.Application.Presence;
 
 public interface IUserPresenceTracker
 {
-    PresenceResponse Connected(Guid userId);
-    PresenceResponse Disconnected(Guid userId);
-    PresenceResponse Get(Guid userId);
+    Task<PresenceResponse> ConnectedAsync(Guid userId);
+    Task<PresenceResponse> DisconnectedAsync(Guid userId);
+    Task<PresenceResponse> RefreshAsync(Guid userId);
+    Task<PresenceResponse> GetAsync(Guid userId);
 }

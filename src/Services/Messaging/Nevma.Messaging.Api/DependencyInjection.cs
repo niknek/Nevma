@@ -11,6 +11,7 @@ using Nevma.Messaging.Api.Infrastructure.Inbox;
 using Nevma.Messaging.Api.Infrastructure.Messaging;
 using Nevma.Messaging.Api.Infrastructure.Realtime;
 using Nevma.Messaging.Api.Application.Presence;
+using StackExchange.Redis;
 
 namespace Nevma.Messaging.Api;
 
@@ -30,6 +31,7 @@ public static class DependencyInjection
                     npgsqlOptions.EnableRetryOnFailure();
                 }));
         services.AddMessagingAuthentication(configuration);
+        var signalR = services.AddSignalR(options => options.MaximumReceiveMessageSize = 32 * 1024);
         services.AddScoped<IMessagingUnitOfWork>(provider =>
             provider.GetRequiredService<MessagingDbContext>());
         services.AddScoped<IConversationRepository, EfConversationRepository>();
@@ -37,7 +39,33 @@ public static class DependencyInjection
         services.AddScoped<IFileAttachmentAuthorizer, HttpFileAttachmentAuthorizer>();
         services.AddScoped<IIntegrationEventInbox, EfIntegrationEventInbox>();
         services.AddScoped<IUserRealtimePublisher, SignalRUserRealtimePublisher>();
-        services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
+        var redisOptions = configuration
+            .GetSection(RedisPresenceOptions.SectionName)
+            .Get<RedisPresenceOptions>() ?? new RedisPresenceOptions();
+        services.AddSingleton(redisOptions);
+        if (redisOptions.Enabled)
+        {
+            if (string.IsNullOrWhiteSpace(redisOptions.ConnectionString))
+                throw new InvalidOperationException("Redis:ConnectionString is required when Redis is enabled.");
+            if (redisOptions.PresenceTtlSeconds < 30)
+                throw new InvalidOperationException("Redis:PresenceTtlSeconds must be at least 30 seconds.");
+
+            var redisConfiguration = ConfigurationOptions.Parse(redisOptions.ConnectionString);
+            redisConfiguration.AbortOnConnectFail = false;
+            redisConfiguration.ChannelPrefix = RedisChannel.Literal("nevma:messaging");
+            services.AddSingleton<IConnectionMultiplexer>(
+                _ => ConnectionMultiplexer.Connect(redisConfiguration));
+            signalR.AddStackExchangeRedis(redisOptions.ConnectionString, options =>
+            {
+                options.Configuration.AbortOnConnectFail = false;
+                options.Configuration.ChannelPrefix = RedisChannel.Literal("nevma:messaging");
+            });
+            services.AddSingleton<IUserPresenceTracker, RedisUserPresenceTracker>();
+        }
+        else
+        {
+            services.AddSingleton<IUserPresenceTracker, InMemoryUserPresenceTracker>();
+        }
         services.AddScoped<ConversationService>();
         services.AddScoped<MessageService>();
         services.AddScoped<PlanningEventHandler>();
