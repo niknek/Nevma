@@ -57,6 +57,7 @@ jobs:
           path: |
             TestResults
             .ci-logs
+            .ci-openapi
           if-no-files-found: ignore
           retention-days: 7
 

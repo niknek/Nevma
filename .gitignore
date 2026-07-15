@@ -9,6 +9,8 @@ obj/
 .template-hive/
 TestResults/
 coverage/
+.ci-logs/
+.ci-openapi/
 appsettings.Local.json
 .env
 .env.production

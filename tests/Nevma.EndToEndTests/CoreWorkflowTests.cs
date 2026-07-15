@@ -86,6 +86,12 @@ public sealed class CoreWorkflowTests
         Assert.Equal(HttpStatusCode.Created, previewResponse.StatusCode);
         var preview = await ReadAsync<CommandResponse>(previewResponse);
         Assert.Equal(CommandStatus.Previewed, preview.Status);
+        var duplicatePreviewResponse = await commands.PostAsJsonAsync(
+            "/api/commands/preview",
+            new PreviewCommandRequest($"task: {voiceTaskTitle} | priority=high", $"e2e-command-{suffix}"));
+        Assert.Equal(HttpStatusCode.OK, duplicatePreviewResponse.StatusCode);
+        var duplicatePreview = await ReadAsync<CommandResponse>(duplicatePreviewResponse);
+        Assert.Equal(preview.Id, duplicatePreview.Id);
         var confirmResponse = await commands.PostAsync($"/api/commands/{preview.Id}/confirm", null);
         Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
         var executed = await ReadAsync<CommandResponse>(confirmResponse);
@@ -144,6 +150,31 @@ public sealed class CoreWorkflowTests
             $"/api/calendar?from={from}&to={to}");
         Assert.Contains(organizerCalendar!, item => item.InvitationId == invitation.Id);
         Assert.Contains(inviteeCalendar!, item => item.InvitationId == invitation.Id);
+
+        var concurrentStart = DateTimeOffset.UtcNow.AddHours(5);
+        var concurrentInvitationResponse = await organizerPlanning.PostAsJsonAsync(
+            "/api/meeting-invitations/",
+            new CreateMeetingInvitationRequest(
+                invitee.Id,
+                $"Concurrent E2E meeting {suffix[..8]}",
+                concurrentStart,
+                TimeSpan.FromHours(1),
+                "Athens",
+                "Used to verify serializable acceptance"));
+        Assert.Equal(HttpStatusCode.Created, concurrentInvitationResponse.StatusCode);
+        var concurrentInvitation = await ReadAsync<MeetingInvitationResponse>(concurrentInvitationResponse);
+        var concurrentAccepts = await Task.WhenAll(
+            inviteePlanning.PostAsync($"/api/meeting-invitations/{concurrentInvitation.Id}/accept", null),
+            inviteePlanning.PostAsync($"/api/meeting-invitations/{concurrentInvitation.Id}/accept", null));
+        Assert.Single(concurrentAccepts, response => response.StatusCode == HttpStatusCode.OK);
+        Assert.Single(concurrentAccepts, response => response.StatusCode == HttpStatusCode.Conflict);
+        foreach (var response in concurrentAccepts) response.Dispose();
+
+        var concurrentFrom = Uri.EscapeDataString(concurrentStart.AddMinutes(-1).ToString("O"));
+        var concurrentTo = Uri.EscapeDataString(concurrentStart.AddHours(2).ToString("O"));
+        var concurrentCalendar = await inviteePlanning.GetFromJsonAsync<List<CalendarEventResponse>>(
+            $"/api/calendar?from={concurrentFrom}&to={concurrentTo}");
+        Assert.Single(concurrentCalendar!, item => item.InvitationId == concurrentInvitation.Id);
 
         using var inviteeNotifications = CreateClient(NotificationsUri, inviteeToken);
         var notification = await PollAsync(async () =>

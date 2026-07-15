@@ -109,6 +109,8 @@ for url in "${health_urls[@]}"; do
   fi
 done
 
+python3 scripts/verify-api-contracts.py
+
 export NEVMA_RUN_E2E=true
 dotnet test tests/Nevma.EndToEndTests/Nevma.EndToEndTests.csproj \
   --configuration Release \
