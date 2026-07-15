@@ -9,6 +9,8 @@ using Nevma.Identity.Api.Infrastructure.Persistence;
 using Nevma.Identity.Api.Infrastructure.Users;
 using Nevma.Identity.Api.Application.Sessions;
 using Nevma.Identity.Api.Infrastructure.Sessions;
+using Nevma.Identity.Api.Application.Security;
+using Nevma.Identity.Api.Infrastructure.Security;
 using Nevma.ServiceDefaults.Extensions;
 
 namespace Nevma.Identity.Api;
@@ -40,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<UserPrivacyService>();
         services.AddScoped<IRegistrationService, RegistrationService>();
         services.AddScoped<IAccountRecoveryService, AccountRecoveryService>();
+        services.AddScoped<IMultiFactorAuthenticationService, MultiFactorAuthenticationService>();
         var emailOptions = configuration
             .GetSection(IdentityEmailOptions.SectionName)
             .Get<IdentityEmailOptions>() ?? new IdentityEmailOptions();
@@ -48,6 +51,8 @@ public static class DependencyInjection
         services.AddScoped<IDeviceSessionRepository, EfDeviceSessionRepository>();
         services.AddScoped<ISessionTokenRevoker, OpenIddictSessionTokenRevoker>();
         services.AddScoped<DeviceSessionService>();
+        services.AddScoped<ISecurityEventRepository, EfSecurityEventRepository>();
+        services.AddScoped<SecurityEventService>();
         services.AddHostedService<OpenIddictSeeder>();
         return services;
     }

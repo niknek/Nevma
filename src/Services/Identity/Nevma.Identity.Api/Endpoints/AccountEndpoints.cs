@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
+using Nevma.Identity.Api.Application.Security;
 
 namespace Nevma.Identity.Api.Endpoints;
 
@@ -17,46 +18,61 @@ public static class AccountEndpoints
 
         account.MapGet("/login", (HttpContext context, string? returnUrl) =>
         {
-            var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
-            var requestToken = antiforgery.GetAndStoreTokens(context).RequestToken
-                ?? throw new InvalidOperationException("An antiforgery request token could not be created.");
-            var safeReturnUrl = GetSafeReturnUrl(returnUrl);
-
-            var html = $$"""
-                <!doctype html>
-                <html lang="en">
-                <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1">
-                    <title>Sign in to Nevma</title>
-                </head>
-                <body>
-                    <main>
-                        <h1>Sign in to Nevma</h1>
-                        <form method="post" action="/account/login">
-                            <input type="hidden" name="__RequestVerificationToken" value="{{WebUtility.HtmlEncode(requestToken)}}">
-                            <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(safeReturnUrl)}}">
-                            <label>Email <input name="Email" type="email" autocomplete="username" required></label>
-                            <label>Password <input name="Password" type="password" autocomplete="current-password" required></label>
-                            <button type="submit">Sign in</button>
-                        </form>
-                    </main>
-                </body>
-                </html>
-                """;
-
-            return Results.Content(html, "text/html; charset=utf-8");
+            SetSensitiveResponseHeaders(context.Response);
+            return Results.Content(BuildPasswordLoginPage(context, returnUrl), "text/html; charset=utf-8");
         });
 
         account.MapPost("/login", async (
             [FromForm] LoginForm form,
-            SignInManager<IdentityAccount> signInManager) =>
+            HttpContext context,
+            SignInManager<IdentityAccount> signInManager,
+            SecurityEventService securityEvents) =>
         {
-            var result = await signInManager.PasswordSignInAsync(
-                form.Email.Trim(),
-                form.Password,
-                isPersistent: false,
-                lockoutOnFailure: true);
+            SetSensitiveResponseHeaders(context.Response);
+            IdentityAccount? account;
+            string eventType;
+            Microsoft.AspNetCore.Identity.SignInResult result;
+            if (!string.IsNullOrWhiteSpace(form.RecoveryCode))
+            {
+                account = await signInManager.GetTwoFactorAuthenticationUserAsync();
+                eventType = "login.recovery_code";
+                result = await signInManager.TwoFactorRecoveryCodeSignInAsync(form.RecoveryCode.Trim());
+            }
+            else if (!string.IsNullOrWhiteSpace(form.Code))
+            {
+                account = await signInManager.GetTwoFactorAuthenticationUserAsync();
+                eventType = "login.mfa";
+                result = await signInManager.TwoFactorAuthenticatorSignInAsync(
+                    NormalizeCode(form.Code),
+                    isPersistent: false,
+                    rememberClient: false);
+            }
+            else
+            {
+                account = await signInManager.UserManager.FindByEmailAsync(form.Email.Trim());
+                eventType = "login.password";
+                result = await signInManager.PasswordSignInAsync(
+                    form.Email.Trim(),
+                    form.Password,
+                    isPersistent: false,
+                    lockoutOnFailure: true);
+            }
+
+            if (account is not null)
+            {
+                await securityEvents.RecordFromRequestAsync(
+                    account.Id,
+                    eventType,
+                    result.Succeeded || result.RequiresTwoFactor,
+                    context);
+            }
+
+            if (result.RequiresTwoFactor)
+            {
+                return Results.Content(
+                    BuildTwoFactorLoginPage(context, form.ReturnUrl),
+                    "text/html; charset=utf-8");
+            }
 
             return result.Succeeded
                 ? Results.LocalRedirect(GetSafeReturnUrl(form.ReturnUrl))
@@ -68,6 +84,69 @@ public static class AccountEndpoints
         .RequireRateLimiting(AuthenticationConfiguration.AuthenticationRateLimitPolicy);
 
         return endpoints;
+    }
+
+    private static string BuildPasswordLoginPage(HttpContext context, string? returnUrl) => $$"""
+        <!doctype html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Sign in to Nevma</title>
+        </head>
+        <body>
+            <main>
+                <h1>Sign in to Nevma</h1>
+                <form method="post" action="/account/login">
+                    <input type="hidden" name="__RequestVerificationToken" value="{{WebUtility.HtmlEncode(CreateAntiforgeryToken(context))}}">
+                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl))}}">
+                    <label>Email <input name="Email" type="email" autocomplete="username" required></label>
+                    <label>Password <input name="Password" type="password" autocomplete="current-password" required></label>
+                    <button type="submit">Sign in</button>
+                </form>
+            </main>
+        </body>
+        </html>
+        """;
+
+    private static string BuildTwoFactorLoginPage(HttpContext context, string? returnUrl) => $$"""
+        <!doctype html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Verify your Nevma sign-in</title>
+        </head>
+        <body>
+            <main>
+                <h1>Two-step verification</h1>
+                <form method="post" action="/account/login">
+                    <input type="hidden" name="__RequestVerificationToken" value="{{WebUtility.HtmlEncode(CreateAntiforgeryToken(context))}}">
+                    <input type="hidden" name="ReturnUrl" value="{{WebUtility.HtmlEncode(GetSafeReturnUrl(returnUrl))}}">
+                    <label>Authenticator code <input name="Code" inputmode="numeric" autocomplete="one-time-code"></label>
+                    <p>Or use one of your recovery codes.</p>
+                    <label>Recovery code <input name="RecoveryCode" autocomplete="one-time-code"></label>
+                    <button type="submit">Verify</button>
+                </form>
+            </main>
+        </body>
+        </html>
+        """;
+
+    private static string CreateAntiforgeryToken(HttpContext context) =>
+        context.RequestServices.GetRequiredService<IAntiforgery>()
+            .GetAndStoreTokens(context)
+            .RequestToken
+        ?? throw new InvalidOperationException("An antiforgery request token could not be created.");
+
+    private static string NormalizeCode(string code) =>
+        code.Replace(" ", string.Empty, StringComparison.Ordinal)
+            .Replace("-", string.Empty, StringComparison.Ordinal);
+
+    private static void SetSensitiveResponseHeaders(HttpResponse response)
+    {
+        response.Headers.CacheControl = "no-store";
+        response.Headers.Pragma = "no-cache";
     }
 
     private static string GetSafeReturnUrl(string? returnUrl) =>
@@ -83,5 +162,7 @@ public sealed class LoginForm
 {
     public string Email { get; init; } = string.Empty;
     public string Password { get; init; } = string.Empty;
+    public string Code { get; init; } = string.Empty;
+    public string RecoveryCode { get; init; } = string.Empty;
     public string ReturnUrl { get; init; } = "/";
 }

@@ -24,6 +24,8 @@ app.MapHealthChecks("/health");
 app.MapAccountEndpoints();
 app.MapAccountRecoveryEndpoints();
 app.MapAuthenticationEndpoints();
+app.MapMultiFactorAuthenticationEndpoints();
+app.MapSecurityEventEndpoints();
 app.MapContactConnectionEndpoints();
 app.MapDeviceSessionEndpoints();
 app.MapOpenIddictEndpoints();

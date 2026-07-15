@@ -97,6 +97,19 @@ public sealed class IdentityApiTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Fact]
+    public async Task Mfa_endpoints_require_authentication_and_disable_secret_caching()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+
+        var response = await client.GetAsync("/api/auth/mfa");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString(), StringComparison.Ordinal);
+        Assert.Contains("no-cache", response.Headers.Pragma.ToString(), StringComparison.Ordinal);
+    }
+
     private static HttpClient CreateClient(IdentityApiFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions
         {

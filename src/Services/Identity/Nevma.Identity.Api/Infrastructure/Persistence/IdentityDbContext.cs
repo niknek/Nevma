@@ -5,6 +5,7 @@ using Nevma.Identity.Api.Domain.Users;
 using Nevma.Identity.Api.Domain.Connections;
 using Nevma.Identity.Api.Application;
 using Nevma.Identity.Api.Domain.Sessions;
+using Nevma.Identity.Api.Domain.Security;
 using OpenIddict.EntityFrameworkCore;
 
 namespace Nevma.Identity.Api.Infrastructure.Persistence;
@@ -18,6 +19,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
     public DbSet<UserReport> UserReports => Set<UserReport>();
     public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
+    public DbSet<SecurityEvent> SecurityEvents => Set<SecurityEvent>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

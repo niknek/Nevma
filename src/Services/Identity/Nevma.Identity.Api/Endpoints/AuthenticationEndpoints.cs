@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Nevma.Contracts.Identity;
 using Nevma.Identity.Api.Application.Authentication;
 using Nevma.Identity.Api.Infrastructure.Authentication;
+using Nevma.Identity.Api.Application.Security;
 using OpenIddict.Abstractions;
 
 namespace Nevma.Identity.Api.Endpoints;
@@ -26,8 +27,10 @@ public static class AuthenticationEndpoints
 
         endpoints.MapPost("/api/auth/logout-all", async (
             ClaimsPrincipal principal,
+            HttpContext context,
             IOpenIddictTokenManager tokenManager,
             IOpenIddictAuthorizationManager authorizationManager,
+            SecurityEventService securityEvents,
             CancellationToken cancellationToken) =>
         {
             var subject = principal.FindFirstValue(OpenIddictConstants.Claims.Subject);
@@ -36,6 +39,8 @@ public static class AuthenticationEndpoints
 
             await tokenManager.RevokeBySubjectAsync(subject, cancellationToken);
             await authorizationManager.RevokeBySubjectAsync(subject, cancellationToken);
+            if (Guid.TryParse(subject, out var userId))
+                await securityEvents.RecordFromRequestAsync(userId, "sessions.revoked_all", true, context);
             return Results.NoContent();
         })
         .RequireAuthorization()

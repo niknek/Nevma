@@ -12,6 +12,12 @@ CONTRACTS = {
     }),
     "identity": ("https://localhost:7293", {
         "/api/auth/register": {"post"},
+        "/api/auth/mfa": {"get"},
+        "/api/auth/mfa/setup": {"post"},
+        "/api/auth/mfa/enable": {"post"},
+        "/api/auth/mfa/recovery-codes": {"post"},
+        "/api/auth/mfa/disable": {"post"},
+        "/api/auth/security-events": {"get"},
         "/api/auth/sessions": {"get"},
         "/api/auth/sessions/{id}": {"delete"},
         "/api/connections": {"get", "post"},
