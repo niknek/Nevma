@@ -30,6 +30,7 @@ public sealed class CommandValidator : ICommandValidator
                     CommandIntent.AcceptMeeting or CommandIntent.DeclineMeeting or
                     CommandIntent.CancelMeeting => ValidateResource(command),
                 CommandIntent.SendMessage => ValidateMessage(command),
+                CommandIntent.ShareTask => ValidateTaskShare(command),
                 _ => new ParseResult.Invalid("The proposed command intent is not supported.")
             };
         }
@@ -74,5 +75,13 @@ public sealed class CommandValidator : ICommandValidator
                !string.IsNullOrWhiteSpace(request.Text) && request.Text.Length <= 4_000
             ? new ParseResult.Parsed(command)
             : new ParseResult.Invalid("Message arguments are invalid.");
+    }
+
+    private static ParseResult ValidateTaskShare(ParsedCommand command)
+    {
+        var request = JsonSerializer.Deserialize<ShareTaskCommandArguments>(command.ArgumentsJson, JsonOptions);
+        return request is not null && request.TaskId != Guid.Empty && request.UserId != Guid.Empty
+            ? new ParseResult.Parsed(command)
+            : new ParseResult.Invalid("Task sharing arguments are invalid.");
     }
 }

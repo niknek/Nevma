@@ -12,7 +12,7 @@ remaining operational controls before production deployment.
 | Authentication | Unique accounts, strong password policy, lockout, OAuth authorization code with PKCE, short access tokens, reference refresh tokens | Identity integration and end-to-end tests |
 | Multi-factor authentication | TOTP setup and verification, one-time recovery codes, MFA login challenge, token revocation after MFA changes | `MultiFactorAuthenticationTests` and OpenAPI contract gate |
 | Session management | Non-persistent secure host cookies, explicit device sessions, per-session and global revocation | Identity and end-to-end tests |
-| Access control | Bearer authentication by default on user resources and ownership checks in service application layers | Service tests and live workflow test |
+| Access control | Bearer authentication by default, ownership and participant checks in service application layers, and explicit viewer/editor permissions for shared tasks | Service tests and live workflow test |
 | Input and API safety | Request-size limits, upload allow-list, fail-closed malware scanning, bounded image decoding and metadata-free normalization, command confirmation, idempotency and concurrency controls | Unit, contract, load and end-to-end tests |
 | Cryptography | External production signing/encryption certificates, encrypted data-protection keys, protected push tokens | Production configuration validation and startup failure on missing certificates |
 | Logging and monitoring | Correlation IDs, OpenTelemetry, user-visible security events, Prometheus alerts and Grafana dashboard | Service-default tests and observability configuration |

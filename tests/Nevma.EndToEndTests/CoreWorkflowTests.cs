@@ -108,6 +108,25 @@ public sealed class CoreWorkflowTests
         var undone = await ReadAsync<CommandResponse>(undoResponse);
         Assert.Equal(CommandStatus.Undone, undone.Status);
 
+        var sharePreviewResponse = await commands.PostAsJsonAsync(
+            "/api/commands/preview",
+            new PreviewCommandRequest(
+                $"share task: {task.Id} | {invitee.Id} | edit=true",
+                $"e2e-share-{suffix}"));
+        Assert.Equal(HttpStatusCode.Created, sharePreviewResponse.StatusCode);
+        var sharePreview = await ReadAsync<CommandResponse>(sharePreviewResponse);
+        Assert.Equal(CommandIntent.ShareTask, sharePreview.Intent);
+        var shareConfirmResponse = await commands.PostAsync(
+            $"/api/commands/{sharePreview.Id}/confirm",
+            null);
+        Assert.Equal(HttpStatusCode.OK, shareConfirmResponse.StatusCode);
+        var sharedTasks = await inviteePlanning.GetFromJsonAsync<List<SharedTaskResponse>>("/api/tasks/shared");
+        Assert.Contains(sharedTasks!, item => item.Task.Id == task.Id && item.CanEdit);
+        var shareUndoResponse = await commands.PostAsync($"/api/commands/{sharePreview.Id}/undo", null);
+        Assert.Equal(HttpStatusCode.OK, shareUndoResponse.StatusCode);
+        var remainingSharedTasks = await inviteePlanning.GetFromJsonAsync<List<SharedTaskResponse>>("/api/tasks/shared");
+        Assert.DoesNotContain(remainingSharedTasks!, item => item.Task.Id == task.Id);
+
         var liveNotification = new TaskCompletionSource<NotificationResponse>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         await using var notificationHub = new HubConnectionBuilder()

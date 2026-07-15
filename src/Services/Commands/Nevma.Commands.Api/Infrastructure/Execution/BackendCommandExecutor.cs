@@ -42,7 +42,7 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
                     null,
                     $"{target.ClientName} rejected the command with status {(int)response.StatusCode}.");
 
-            if (command.Intent == CommandIntent.DeleteTask)
+            if (command.Intent is CommandIntent.DeleteTask or CommandIntent.ShareTask)
                 return new ExecutionResult(true, target.ResourcePrefix, null);
 
             if (response.Content.Headers.ContentLength == 0)
@@ -74,6 +74,7 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
             CommandIntent.CreateTask => new UndoTarget("Planning", HttpMethod.Delete, $"/api/{command.ResultResource}"),
             CommandIntent.CreateMeeting => new UndoTarget("Planning", HttpMethod.Post, $"/api/{command.ResultResource}/cancel"),
             CommandIntent.SendMessage => new UndoTarget("Messaging", HttpMethod.Delete, $"/api/{command.ResultResource}"),
+            CommandIntent.ShareTask => new UndoTarget("Planning", HttpMethod.Delete, $"/api/{command.ResultResource}"),
             _ => null
         };
         if (undo is null) return false;
@@ -95,11 +96,14 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
     {
         ResourceCommandArguments? resource = null;
         SendMessageCommandArguments? message = null;
+        ShareTaskCommandArguments? share = null;
         if (command.Intent is CommandIntent.CompleteTask or CommandIntent.DeleteTask or
             CommandIntent.AcceptMeeting or CommandIntent.DeclineMeeting or CommandIntent.CancelMeeting)
             resource = JsonSerializer.Deserialize<ResourceCommandArguments>(command.ArgumentsJson);
         if (command.Intent == CommandIntent.SendMessage)
             message = JsonSerializer.Deserialize<SendMessageCommandArguments>(command.ArgumentsJson);
+        if (command.Intent == CommandIntent.ShareTask)
+            share = JsonSerializer.Deserialize<ShareTaskCommandArguments>(command.ArgumentsJson);
 
         return command.Intent switch
         {
@@ -118,6 +122,11 @@ public sealed class BackendCommandExecutor(IHttpClientFactory clientFactory) : I
                 new(HttpMethod.Post, $"/api/conversations/{message.ConversationId}/messages"),
                 true,
                 $"conversations/{message.ConversationId:N}/messages"),
+            CommandIntent.ShareTask when share is not null => new(
+                "Planning",
+                new(HttpMethod.Post, $"/api/tasks/{share.TaskId}/collaborators"),
+                true,
+                $"tasks/{share.TaskId:N}/collaborators/{share.UserId:N}"),
             _ => null
         };
     }

@@ -34,7 +34,9 @@ public static class DependencyInjection
         services.AddScoped<OutboxStore>();
         services.AddScoped<PlanningService>();
         services.AddScoped<ITaskRepository, EfTaskRepository>();
+        services.AddScoped<ITaskShareRepository, EfTaskShareRepository>();
         services.AddScoped<TaskService>();
+        services.AddScoped<TaskSharingService>();
         services.AddScoped<IPlanningSearchService, EfPlanningSearchService>();
         services.AddScoped<TaskReminderProcessor>();
         services.AddHostedService<TaskReminderWorker>();

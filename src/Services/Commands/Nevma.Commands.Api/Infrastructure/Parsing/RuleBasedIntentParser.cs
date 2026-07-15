@@ -22,6 +22,7 @@ public sealed class RuleBasedIntentParser : IIntentParser
             return ParseResource(text, CommandIntent.CompleteTask, "Complete task");
         if (StartsWith(text, "delete task:", "διέγραψε εργασία:"))
             return ParseResource(text, CommandIntent.DeleteTask, "Delete task");
+        if (StartsWith(text, "share task:", "μοίρασε εργασία:")) return ParseTaskShare(text);
         if (StartsWith(text, "meeting:", "συνάντηση:")) return ParseMeeting(text, now);
         if (StartsWith(text, "accept meeting:", "αποδέξου συνάντηση:"))
             return ParseResource(text, CommandIntent.AcceptMeeting, "Accept meeting");
@@ -94,6 +95,25 @@ public sealed class RuleBasedIntentParser : IIntentParser
             CommandIntent.SendMessage,
             $"Send a message to conversation {conversationId}",
             JsonSerializer.Serialize(new SendMessageCommandArguments(conversationId, parts[1]))));
+    }
+
+    private static ParseResult ParseTaskShare(string text)
+    {
+        var parts = Body(text).Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || !Guid.TryParse(parts[0], out var taskId) ||
+            !Guid.TryParse(parts[1], out var userId))
+            return new ParseResult.Invalid("Task sharing requires valid task and user identifiers.");
+        var canEdit = false;
+        foreach (var part in parts.Skip(2))
+        {
+            var pair = SplitPair(part);
+            if (pair?.Key == "edit" && bool.TryParse(pair.Value.Value, out var parsed))
+                canEdit = parsed;
+        }
+        return new ParseResult.Parsed(new ParsedCommand(
+            CommandIntent.ShareTask,
+            $"Share task {taskId} with user {userId}",
+            JsonSerializer.Serialize(new ShareTaskCommandArguments(taskId, userId, canEdit))));
     }
 
     private static bool StartsWith(string text, params string[] prefixes) =>

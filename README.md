@@ -23,6 +23,10 @@ connections, and unread notifications without reading another service's database
 caller's planning items, conversations/messages, and accessible files. Each source applies its
 own ownership or participant rules before the Gateway merges and sorts results.
 
+Task owners can share a task with another user as either a viewer or an editor. Shared tasks are
+returned by `GET /api/tasks/shared` and appear in global search, while only owners can manage
+collaborators or delete the task. Editors can update and complete it; viewers have read-only access.
+
 ## Local development
 
 The repository is pinned to .NET SDK 10.0.301.
@@ -68,8 +72,9 @@ dotnet test tests/Nevma.EndToEndTests
 ```
 
 It exercises registration, OAuth authorization code with PKCE, contacts, meeting acceptance,
-calendar persistence, RabbitMQ notifications, and conversation integration. The test is skipped
-in the normal unit-test run when `NEVMA_RUN_E2E` is not enabled.
+calendar persistence, RabbitMQ notifications, conversation integration, and task sharing through
+a confirmed voice command followed by undo. The test is skipped in the normal unit-test run when
+`NEVMA_RUN_E2E` is not enabled.
 
 The CI workflow also runs a short k6 health-load gate. Run an authenticated staging load test with:
 
@@ -213,7 +218,9 @@ Commands never execute directly from raw voice text. `/api/commands/preview` cre
 structured plan, `/confirm` executes it with the authenticated user's token, and `/undo` reverses
 supported operations. Raw transcripts are not persisted; the audit record stores their hash. The
 rule parser supports task creation/completion/deletion, meeting creation/acceptance/decline/
-cancellation, and conversation messages in English or Greek command prefixes.
+cancellation, task sharing, and conversation messages in English or Greek command prefixes. The
+deterministic sharing syntax is `share task: <task-id> | <user-id> | edit=true`; omitting the final
+flag creates a read-only share.
 
 `POST /api/commands/transcribe` accepts an authenticated multipart upload named `audio` (up to
 25 MB). Speech-to-text and natural-language interpretation are provider-neutral HTTP adapters and

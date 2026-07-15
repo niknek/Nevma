@@ -37,6 +37,24 @@ public sealed class CommandServiceTests
         Assert.Equal(expected, parsed.Command.Intent);
     }
 
+    [Theory]
+    [InlineData("share task:")]
+    [InlineData("μοίρασε εργασία:")]
+    public void Parser_creates_a_task_sharing_preview(string prefix)
+    {
+        var taskId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+
+        var result = new RuleBasedIntentParser().Parse(
+            $"{prefix} {taskId} | {userId} | edit=true",
+            Now);
+
+        var parsed = Assert.IsType<ParseResult.Parsed>(result);
+        Assert.Equal(CommandIntent.ShareTask, parsed.Command.Intent);
+        Assert.Contains(taskId.ToString(), parsed.Command.ArgumentsJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("\"canEdit\":true", parsed.Command.ArgumentsJson, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Ai_proposals_are_validated_before_preview()
     {

@@ -23,6 +23,17 @@ public sealed class EfTaskRepository(PlanningDbContext dbContext) : ITaskReposit
             task => task.Id == id && task.OwnerId == ownerId && task.DeletedAt == null,
             cancellationToken);
 
+    public Task<TaskItem?> GetAccessibleAsync(
+        Guid id,
+        Guid userId,
+        bool requireEdit,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Tasks.SingleOrDefaultAsync(task =>
+            task.Id == id && task.DeletedAt == null &&
+            (task.OwnerId == userId || dbContext.TaskShares.Any(share =>
+                share.TaskId == task.Id && share.UserId == userId && (!requireEdit || share.CanEdit))),
+            cancellationToken);
+
     public async Task<IReadOnlyList<TaskItem>> ListAsync(
         Guid ownerId,
         TaskFilter filter,

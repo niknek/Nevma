@@ -8,6 +8,11 @@ public interface ITaskRepository
     Task AddAsync(TaskItem task, CancellationToken cancellationToken = default);
     void Remove(TaskItem task);
     Task<TaskItem?> GetAsync(Guid id, Guid ownerId, CancellationToken cancellationToken = default);
+    Task<TaskItem?> GetAccessibleAsync(
+        Guid id,
+        Guid userId,
+        bool requireEdit,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TaskItem>> ListAsync(
         Guid ownerId,
         TaskFilter filter,

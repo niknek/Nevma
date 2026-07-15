@@ -35,6 +35,12 @@ public sealed record TaskResponse(
     DateTimeOffset? CompletedAt,
     DateTimeOffset? UpdatedAt);
 
+public sealed record ShareTaskRequest(Guid UserId, bool CanEdit);
+
+public sealed record TaskShareResponse(Guid UserId, bool CanEdit, DateTimeOffset SharedAt);
+
+public sealed record SharedTaskResponse(TaskResponse Task, Guid OwnerId, bool CanEdit, DateTimeOffset SharedAt);
+
 public enum TaskPriority
 {
     Low,

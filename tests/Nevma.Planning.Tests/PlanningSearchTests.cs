@@ -15,18 +15,23 @@ public sealed class PlanningSearchTests
                 .UseInMemoryDatabase($"planning-search-{Guid.NewGuid():N}")
                 .Options);
         var userId = Guid.NewGuid();
+        var owned = TaskItem.Create(userId, "Prepare roadmap", "Q4 priorities", null, TaskPriority.High,
+            null, TaskRecurrence.None, 1, null, DateTimeOffset.UtcNow);
+        var shared = TaskItem.Create(Guid.NewGuid(), "Shared roadmap", null, null, TaskPriority.Normal,
+            null, TaskRecurrence.None, 1, null, DateTimeOffset.UtcNow);
         context.Tasks.AddRange(
-            TaskItem.Create(userId, "Prepare roadmap", "Q4 priorities", null, TaskPriority.High,
-                null, TaskRecurrence.None, 1, null, DateTimeOffset.UtcNow),
+            owned,
+            shared,
             TaskItem.Create(Guid.NewGuid(), "Private roadmap", null, null, TaskPriority.Normal,
                 null, TaskRecurrence.None, 1, null, DateTimeOffset.UtcNow));
+        context.TaskShares.Add(TaskShare.Create(shared.Id, userId, true, DateTimeOffset.UtcNow));
         await context.SaveChangesAsync();
         var service = new EfPlanningSearchService(context);
 
         var results = await service.SearchAsync(userId, "roadmap", 20);
 
-        var item = Assert.Single(results);
-        Assert.Equal("Prepare roadmap", item.Title);
-        Assert.Equal("task", item.Kind);
+        Assert.Equal(2, results.Count);
+        Assert.Contains(results, item => item.Title == "Prepare roadmap" && item.Kind == "task");
+        Assert.Contains(results, item => item.Title == "Shared roadmap" && item.Kind == "task");
     }
 }

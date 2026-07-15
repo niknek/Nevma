@@ -18,7 +18,9 @@ public sealed class EfPlanningSearchService(PlanningDbContext dbContext) : IPlan
         var take = Math.Clamp(limit, 1, 50);
         var tasks = await dbContext.Tasks
             .AsNoTracking()
-            .Where(item => item.OwnerId == userId && item.DeletedAt == null &&
+            .Where(item => (item.OwnerId == userId || dbContext.TaskShares.Any(share =>
+                    share.TaskId == item.Id && share.UserId == userId)) &&
+                item.DeletedAt == null &&
                 (item.Title.ToLower().Contains(normalized) ||
                  (item.Notes != null && item.Notes.ToLower().Contains(normalized))))
             .OrderByDescending(item => item.UpdatedAt ?? item.CreatedAt)

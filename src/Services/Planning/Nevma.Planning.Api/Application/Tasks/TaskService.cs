@@ -51,7 +51,7 @@ public sealed class TaskService(
         Guid ownerId,
         CancellationToken cancellationToken = default)
     {
-        var task = await repository.GetAsync(id, ownerId, cancellationToken);
+        var task = await repository.GetAccessibleAsync(id, ownerId, requireEdit: true, cancellationToken);
         if (task is null)
             return new CompleteTaskResult.NotFound();
         if (!task.Complete(timeProvider.GetUtcNow()))
@@ -93,7 +93,7 @@ public sealed class TaskService(
         if (errors.Count > 0)
             return new ChangeTaskResult.ValidationFailed(errors);
 
-        var task = await repository.GetAsync(id, ownerId, cancellationToken);
+        var task = await repository.GetAccessibleAsync(id, ownerId, requireEdit: true, cancellationToken);
         if (task is null)
             return new ChangeTaskResult.NotFound();
         if (task.Status == DomainStatus.Completed)
@@ -183,7 +183,7 @@ public sealed class TaskService(
         return errors;
     }
 
-    private static TaskResponse ToResponse(Domain.Tasks.TaskItem task) =>
+    internal static TaskResponse ToResponse(Domain.Tasks.TaskItem task) =>
         new(
             task.Id,
             task.Title,

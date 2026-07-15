@@ -46,6 +46,61 @@ public static class TaskEndpoints
                 cancellationToken));
         });
 
+        tasks.MapGet("/shared", async (
+            ClaimsPrincipal principal,
+            TaskSharingService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var userId))
+                return Results.Unauthorized();
+            return Results.Ok(await service.ListSharedAsync(userId, cancellationToken));
+        });
+
+        tasks.MapGet("/{id:guid}/collaborators", async (
+            Guid id,
+            ClaimsPrincipal principal,
+            TaskSharingService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var ownerId))
+                return Results.Unauthorized();
+            var collaborators = await service.ListCollaboratorsAsync(id, ownerId, cancellationToken);
+            return collaborators is null ? Results.NotFound() : Results.Ok(collaborators);
+        });
+
+        tasks.MapPost("/{id:guid}/collaborators", async (
+            Guid id,
+            ShareTaskRequest request,
+            ClaimsPrincipal principal,
+            TaskSharingService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var ownerId))
+                return Results.Unauthorized();
+            return await service.ShareAsync(id, ownerId, request, cancellationToken) switch
+            {
+                TaskShareResult.Changed changed => Results.Ok(changed.Share),
+                TaskShareResult.Invalid invalid => Results.ValidationProblem(
+                    new Dictionary<string, string[]> { ["userId"] = [invalid.Message] }),
+                TaskShareResult.NotFound => Results.NotFound(),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        });
+
+        tasks.MapDelete("/{id:guid}/collaborators/{userId:guid}", async (
+            Guid id,
+            Guid userId,
+            ClaimsPrincipal principal,
+            TaskSharingService service,
+            CancellationToken cancellationToken) =>
+        {
+            if (!TryGetUserId(principal, out var ownerId))
+                return Results.Unauthorized();
+            return await service.RevokeAsync(id, ownerId, userId, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound();
+        });
+
         tasks.MapPost("/{id:guid}/complete", async (
             Guid id,
             ClaimsPrincipal principal,

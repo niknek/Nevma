@@ -60,3 +60,4 @@ public sealed class CommandRequest
 public sealed record ParsedCommand(CommandIntent Intent, string Summary, string ArgumentsJson);
 public sealed record ResourceCommandArguments(Guid Id);
 public sealed record SendMessageCommandArguments(Guid ConversationId, string Text);
+public sealed record ShareTaskCommandArguments(Guid TaskId, Guid UserId, bool CanEdit);

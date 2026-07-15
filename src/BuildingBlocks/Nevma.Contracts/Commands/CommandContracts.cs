@@ -21,6 +21,7 @@ public enum CommandIntent
     CreateTask,
     CompleteTask,
     DeleteTask,
+    ShareTask,
     CreateMeeting,
     AcceptMeeting,
     DeclineMeeting,
