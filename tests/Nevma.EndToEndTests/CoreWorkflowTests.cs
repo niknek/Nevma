@@ -33,8 +33,16 @@ public sealed class CoreWorkflowTests
 
         var organizer = await RegisterAsync(identity, organizerEmail, password, "E2E Organizer");
         var invitee = await RegisterAsync(identity, inviteeEmail, password, "E2E Invitee");
-        var organizerToken = await AcquireTokenAsync(organizerEmail, password);
-        var inviteeToken = await AcquireTokenAsync(inviteeEmail, password);
+        var organizerToken = await AcquireTokenAsync(
+            organizerEmail,
+            password,
+            $"e2e-organizer-{suffix}",
+            "E2E Organizer phone");
+        var inviteeToken = await AcquireTokenAsync(
+            inviteeEmail,
+            password,
+            $"e2e-invitee-{suffix}",
+            "E2E Invitee phone");
 
         using var organizerIdentity = CreateClient(IdentityUri, organizerToken);
         using var inviteeIdentity = CreateClient(IdentityUri, inviteeToken);
@@ -141,6 +149,14 @@ public sealed class CoreWorkflowTests
             return presence is { IsOnline: false, LastSeenAt: not null } ? presence : null;
         });
         Assert.NotNull(offlinePresence);
+
+        var sessions = await inviteeIdentity.GetFromJsonAsync<List<DeviceSessionResponse>>(
+            "/api/auth/sessions/");
+        var currentSession = Assert.Single(sessions!, session => session.IsCurrent);
+        var revokeSession = await inviteeIdentity.DeleteAsync($"/api/auth/sessions/{currentSession.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, revokeSession.StatusCode);
+        var revokedTokenRequest = await inviteeIdentity.GetAsync("/api/users/me");
+        Assert.Equal(HttpStatusCode.Unauthorized, revokedTokenRequest.StatusCode);
     }
 
     private static async Task<UserSummary> RegisterAsync(
@@ -156,7 +172,11 @@ public sealed class CoreWorkflowTests
         return await ReadAsync<UserSummary>(response);
     }
 
-    private static async Task<string> AcquireTokenAsync(string email, string password)
+    private static async Task<string> AcquireTokenAsync(
+        string email,
+        string password,
+        string deviceId,
+        string deviceName)
     {
         using var client = CreateClient(IdentityUri);
         var verifier = Base64Url(RandomNumberGenerator.GetBytes(64));
@@ -167,7 +187,10 @@ public sealed class CoreWorkflowTests
             $"&redirect_uri={Uri.EscapeDataString(RedirectUri)}" +
             $"&scope={Uri.EscapeDataString("openid profile email offline_access nevma_api")}" +
             $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-            "&code_challenge_method=S256";
+            "&code_challenge_method=S256" +
+            $"&device_id={Uri.EscapeDataString(deviceId)}" +
+            $"&device_name={Uri.EscapeDataString(deviceName)}" +
+            "&device_platform=Android";
 
         var challengeResponse = await client.GetAsync(authorizePath);
         Assert.Equal(HttpStatusCode.Redirect, challengeResponse.StatusCode);

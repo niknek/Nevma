@@ -66,6 +66,37 @@ public sealed class IdentityApiTests
         Assert.Equal(HttpStatusCode.TooManyRequests, finalResponse.StatusCode);
     }
 
+    [Fact]
+    public async Task Password_reset_request_does_not_disclose_unknown_accounts()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/password-reset/request",
+            new RequestPasswordResetRequest("missing@example.com"));
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Invalid_password_reset_token_is_rejected()
+    {
+        using var factory = new IdentityApiFactory();
+        using var client = CreateClient(factory);
+        await factory.InitializeDatabaseAsync();
+
+        var response = await client.PostAsJsonAsync(
+            "/api/auth/password-reset/confirm",
+            new ResetPasswordRequest(
+                "missing@example.com",
+                "invalid-token",
+                "NewStrong!Password123"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static HttpClient CreateClient(IdentityApiFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions
         {

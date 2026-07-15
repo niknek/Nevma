@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Nevma.Identity.Api.Domain.Users;
 using Nevma.Identity.Api.Domain.Connections;
 using Nevma.Identity.Api.Application;
+using Nevma.Identity.Api.Domain.Sessions;
 using OpenIddict.EntityFrameworkCore;
 
 namespace Nevma.Identity.Api.Infrastructure.Persistence;
@@ -16,6 +17,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<BlockedUser> BlockedUsers => Set<BlockedUser>();
     public DbSet<UserReport> UserReports => Set<UserReport>();
+    public DbSet<DeviceSession> DeviceSessions => Set<DeviceSession>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

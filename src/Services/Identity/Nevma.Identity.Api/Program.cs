@@ -22,8 +22,10 @@ app.UseAuthorization();
 app.UseAntiforgery();
 app.MapHealthChecks("/health");
 app.MapAccountEndpoints();
+app.MapAccountRecoveryEndpoints();
 app.MapAuthenticationEndpoints();
 app.MapContactConnectionEndpoints();
+app.MapDeviceSessionEndpoints();
 app.MapOpenIddictEndpoints();
 app.MapUserEndpoints();
 

@@ -89,6 +89,17 @@ Development seeds the public `nevma-mobile` client. Non-development environments
 signing and encryption PFX certificates through the `Authentication__*CertificatePath` and
 `Authentication__*CertificatePassword` configuration keys.
 
+Mobile authorization requests should include `device_id`, `device_name`, and `device_platform`.
+Identity binds the resulting access and refresh tokens to a durable device session. Authenticated
+clients can list sessions at `GET /api/auth/sessions` and revoke one with
+`DELETE /api/auth/sessions/{id}`; revocation invalidates every token for that authorization.
+
+Password reset and email-confirmation endpoints use ASP.NET Core Identity's protected,
+single-purpose tokens. SMTP delivery is disabled locally. Enable `EmailDelivery__Enabled` only
+after setting `EmailDelivery__SmtpHost`, `EmailDelivery__FromAddress`, and credentials through a
+secret provider. Recovery endpoints never disclose whether an email address is registered and do
+not log recovery tokens.
+
 The Planning service owns a separate PostgreSQL database/schema and validates `nevma_api`
 access tokens issued by Identity. Configure and migrate it independently:
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Nevma.Identity.Api.Application.Users;
+using Nevma.Identity.Api.Application.Sessions;
 using Nevma.Identity.Api.Infrastructure.Authentication;
 using Nevma.Identity.Api.Infrastructure.Persistence;
 using OpenIddict.Abstractions;
@@ -31,7 +32,10 @@ public static class OpenIddictEndpoints
         HttpContext context,
         UserManager<IdentityAccount> userManager,
         SignInManager<IdentityAccount> signInManager,
-        UserService userService)
+        UserService userService,
+        DeviceSessionService deviceSessionService,
+        IOpenIddictApplicationManager applicationManager,
+        IOpenIddictAuthorizationManager authorizationManager)
     {
         var request = context.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenID Connect request is unavailable.");
@@ -60,6 +64,41 @@ public static class OpenIddictEndpoints
         principal.SetScopes(request.GetScopes());
         principal.SetResources("nevma_api");
 
+        var application = await applicationManager.FindByClientIdAsync(
+            request.ClientId ?? string.Empty,
+            context.RequestAborted);
+        if (application is null)
+            return Results.Forbid(authenticationSchemes: [IdentityConstants.ApplicationScheme]);
+        var applicationId = await applicationManager.GetIdAsync(application, context.RequestAborted)
+            ?? throw new InvalidOperationException("The OpenID Connect client has no identifier.");
+        var authorizationDescriptor = new OpenIddictAuthorizationDescriptor
+        {
+            ApplicationId = applicationId,
+            Status = OpenIddictConstants.Statuses.Valid,
+            Subject = account.Id.ToString(),
+            Type = OpenIddictConstants.AuthorizationTypes.AdHoc
+        };
+        authorizationDescriptor.Scopes.UnionWith(request.GetScopes());
+        var authorization = await authorizationManager.CreateAsync(
+            authorizationDescriptor,
+            context.RequestAborted);
+        var authorizationId = await authorizationManager.GetIdAsync(
+            authorization,
+            context.RequestAborted)
+            ?? throw new InvalidOperationException("The OpenID Connect authorization has no identifier.");
+        principal.SetAuthorizationId(authorizationId);
+
+        var sessionId = Guid.NewGuid();
+        principal.SetClaim("session_id", sessionId.ToString());
+        await deviceSessionService.StartAsync(
+            sessionId,
+            account.Id,
+            ReadDeviceParameter(request, "device_id", $"browser:{sessionId:N}", 128),
+            ReadDeviceParameter(request, "device_name", "Unknown device", 100),
+            ReadDeviceParameter(request, "device_platform", "Unknown", 30),
+            authorizationId,
+            context.RequestAborted);
+
         foreach (var claim in principal.Claims)
             claim.SetDestinations(GetDestinations(claim, principal));
 
@@ -87,9 +126,24 @@ public static class OpenIddictEndpoints
                 [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken],
             OpenIddictConstants.Claims.Email when principal.HasScope(OpenIddictConstants.Scopes.Email) =>
                 [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken],
+            "session_id" =>
+                [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken],
             ClaimTypes.Role =>
                 [OpenIddictConstants.Destinations.AccessToken],
             _ => []
         };
+    }
+
+    private static string ReadDeviceParameter(
+        OpenIddictRequest request,
+        string name,
+        string fallback,
+        int maxLength)
+    {
+        var value = (string?)request.GetParameter(name);
+        if (string.IsNullOrWhiteSpace(value))
+            return fallback;
+        value = value.Trim();
+        return value.Length <= maxLength ? value : value[..maxLength];
     }
 }
